@@ -1,0 +1,17 @@
+{
+  "name": "@chronosops/web",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "next dev -p 3000"
+  },
+  "dependencies": {
+    "@chronosops/contracts": "workspace:*",
+    "next": "^15.1.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7"
+  }
+}
