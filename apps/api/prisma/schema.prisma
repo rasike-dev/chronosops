@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Incident {
+  id          String   @id @default(cuid())
+  scenarioId  String
+  title       String?
+  status      String   @default("analyzed")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  analyses    IncidentAnalysis[]
+  postmortems Postmortem[]
+}
+
+model IncidentAnalysis {
+  id          String   @id @default(cuid())
+  incidentId  String
+  createdAt   DateTime @default(now())
+
+  // store request + result for replayability
+  requestJson Json
+  resultJson  Json
+
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}
+
+model Postmortem {
+  id          String   @id @default(cuid())
+  incidentId  String
+  createdAt   DateTime @default(now())
+
+  markdown    String
+  json        Json
+
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}

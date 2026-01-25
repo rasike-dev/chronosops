@@ -1,11 +1,21 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { HealthModule } from "./modules/health/health.module";
 import { ScenarioModule } from "./modules/scenario/scenario.module";
 import { IncidentsModule } from "./modules/incidents/incidents.module";
 import { VersionModule } from "./modules/version/version.module";
+import { PrismaModule } from "./prisma/prisma.module";
+import { AuthModule } from "./auth/auth.module";
+import { JwtAuthGuard } from "./auth/jwt-auth.guard";
 
 @Module({
-  imports: [HealthModule, ScenarioModule, IncidentsModule, VersionModule],
+  imports: [PrismaModule, HealthModule, ScenarioModule, IncidentsModule, VersionModule, AuthModule],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+  ],
 })
 export class AppModule {}
 

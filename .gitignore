@@ -8,6 +8,10 @@ dist/
 build/
 *.tsbuildinfo
 
+# Next.js
+.next/
+out/
+
 # Environment variables
 .env
 .env.local
@@ -15,6 +19,8 @@ build/
 .env.development
 .env.production
 .env.test
+.env.backup
+*.backup
 
 # Logs
 logs/

@@ -1,7 +1,9 @@
 import { Controller, Get } from "@nestjs/common";
+import { Public } from "../../auth/public.decorator";
 
 @Controller("v1/version")
 export class VersionController {
+  @Public()
   @Get()
   getVersion() {
     return {

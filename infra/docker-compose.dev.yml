@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: chronosops-postgres
+    environment:
+      POSTGRES_USER: chronosops
+      POSTGRES_PASSWORD: chronosops
+      POSTGRES_DB: chronosops
+    ports:
+      - "5432:5432"
+    volumes:
+      - chronosops_pgdata:/var/lib/postgresql/data
+volumes:
+  chronosops_pgdata:
