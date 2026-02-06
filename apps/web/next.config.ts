@@ -2,14 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: "http://localhost:4000/:path*",
-      },
-    ];
-  },
+  // Removed rewrites - using route handlers instead to forward auth tokens
 };
 
 export default nextConfig;

@@ -14,7 +14,8 @@
       "baseUrl": "./",
       "incremental": true,
       "skipLibCheck": true,
-      "strict": true
+      "strict": true,
+      "typeRoots": ["./node_modules/@types", "../node_modules/@types", "../../node_modules/@types"]
     },
     "include": ["src/**/*", "prisma.config.ts"]
   }

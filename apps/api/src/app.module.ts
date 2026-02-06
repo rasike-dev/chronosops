@@ -7,6 +7,7 @@ import { VersionModule } from "./modules/version/version.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/jwt-auth.guard";
+import { RolesGuard } from "./auth/roles.guard";
 
 @Module({
   imports: [PrismaModule, HealthModule, ScenarioModule, IncidentsModule, VersionModule, AuthModule],
@@ -14,6 +15,10 @@ import { JwtAuthGuard } from "./auth/jwt-auth.guard";
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
 })

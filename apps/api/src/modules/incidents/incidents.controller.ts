@@ -3,6 +3,8 @@ import { AnalyzeIncidentRequestSchema, AnalyzeIncidentResponseSchema } from "@ch
 import { ScenarioService } from "../scenario/scenario.service";
 import { IncidentsPersistenceService } from "./incidents.persistence.service";
 import { PrismaService } from "../../prisma/prisma.service";
+import { Public } from "../../auth/public.decorator";
+import { Roles } from "../../auth/roles.decorator";
 
 @Controller("v1/incidents")
 export class IncidentsController {
@@ -12,6 +14,7 @@ export class IncidentsController {
     private readonly prisma: PrismaService,
   ) {}
 
+  @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
   @Get()
   async list() {
     try {
@@ -36,6 +39,7 @@ export class IncidentsController {
     }
   }
 
+  @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
   @Get(':id')
   async detail(@Param('id') id: string) {
     try {
@@ -70,6 +74,7 @@ export class IncidentsController {
     }
   }
 
+  @Roles('CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
   @Post(":id/reanalyze")
   async reanalyze(@Param('id') incidentId: string) {
     try {
@@ -146,6 +151,7 @@ export class IncidentsController {
     }
   }
 
+  @Roles('CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
   @Post("analyze")
   async analyze(@Body() body: any) {
     try {

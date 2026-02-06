@@ -39,9 +39,17 @@ export default function LatencySpikeDemo() {
 
   useEffect(() => {
     (async () => {
-      const res = await fetch(`/api/v1/scenarios`);
-      const json = await res.json();
-      setScenarioList(ScenarioListSchema.parse(json));
+      try {
+        const res = await fetch(`/api/v1/scenarios`);
+        if (!res.ok) {
+          throw new Error(`Failed to load scenarios: ${res.status} ${res.statusText}`);
+        }
+        const json = await res.json();
+        setScenarioList(ScenarioListSchema.parse(json));
+      } catch (e: any) {
+        console.error("Failed to load scenarios:", e);
+        setErr(e?.message ?? "Failed to load scenarios");
+      }
     })();
   }, []);
 
@@ -52,6 +60,9 @@ export default function LatencySpikeDemo() {
         setScenario(null);
         setAnalysis(null);
         const res = await fetch(`/api/v1/scenarios/${scenarioId}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load scenario: ${res.status} ${res.statusText}`);
+        }
         const json = await res.json();
         setScenario(ScenarioSchema.parse(json));
       } catch (e: any) {
@@ -92,6 +103,10 @@ export default function LatencySpikeDemo() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenarioId, windowMinutesBefore: 15, windowMinutesAfter: 15 }),
       });
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(`Analyze failed: ${res.status} ${errorJson.message || res.statusText}`);
+      }
       const json = await res.json();
       setAnalysis(AnalyzeIncidentResponseSchema.parse(json));
     } catch (e: any) {
