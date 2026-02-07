@@ -1,6 +1,6 @@
 # ChronosOps — Enterprise Autonomous SRE (MVP)
 
-ChronosOps investigates production incidents by reasoning over deployments and telemetry, producing evidence-backed root-cause hypotheses, explainable reasoning, scenario-aware runbooks, and exportable postmortems (Markdown + JSON).
+ChronosOps investigates production incidents by reasoning over deployments and telemetry using **Gemini 3 Flash Preview**, producing evidence-backed root-cause hypotheses, explainable reasoning, scenario-aware runbooks, and exportable postmortems (Markdown + JSON).
 
 ## What's in this MVP
 - Monorepo (pnpm workspace)
@@ -33,6 +33,7 @@ ChronosOps investigates production incidents by reasoning over deployments and t
 - pnpm (workspace)
 - PostgreSQL (for persistence)
 - Docker & Docker Compose (optional, for local PostgreSQL)
+- **Gemini API Key** (optional, for AI reasoning) - Get one at https://aistudio.google.com/app/apikey
 
 ## Quick Start
 
@@ -45,6 +46,8 @@ One-command bring-up:
 cp .env.example .env
 
 # 2. Edit .env if needed (defaults work for local dev)
+#    - Set GEMINI_API_KEY for AI reasoning (optional)
+#    - GEMINI_MODEL defaults to "gemini-3-flash-preview"
 
 # 3. Start all services
 docker compose up -d --build
@@ -68,7 +71,10 @@ pnpm install
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env and set DATABASE_URL
+# Edit .env and set:
+#   - DATABASE_URL (required)
+#   - GEMINI_API_KEY (optional, for AI reasoning)
+#   - GEMINI_MODEL (optional, defaults to "gemini-3-flash-preview")
 
 # 3. Start PostgreSQL (if using Docker Compose)
 docker-compose -f infra/docker-compose.dev.yml up -d
@@ -169,7 +175,7 @@ All records are insert-only (never overwritten) to maintain a full audit trail.
 
 ### Autonomous Investigation
 - **Investigation Loop**: Bounded iterations with stop conditions (confidence target, max iterations, no progress)
-- **Model-Directed**: Gemini can request specific evidence types (Day 17)
+- **Model-Directed**: **Gemini 3 Flash Preview** can request specific evidence types (Day 17)
 - **Deterministic Fallback**: Falls back to completeness-based plan if model requests unavailable
 - **Full Audit**: Every iteration recorded with decision JSON
 
@@ -275,7 +281,7 @@ See `docs/ship-checklist.md` for a comprehensive checklist of all features.
 
 **Autonomous Investigation (Days 16-17):**
 - Investigation loop orchestration with bounded iterations
-- Model-directed evidence requests (Gemini tool protocol)
+- Model-directed evidence requests using **Gemini 3 Flash Preview** (tool protocol)
 - Deterministic fallback planning
 - Stop conditions (confidence target, max iterations, no progress)
 - Full iteration audit trail

@@ -188,11 +188,19 @@ These variables control which collectors are active and their behavior.
 - **Example**: `AIzaSy...` (Google AI Studio API key)
 - **Used by**: `GeminiReasoningAdapter` for generating incident analysis
 - **Where**: `apps/api/src/reasoning/reasoning.adapter.ts`
-- **Note**: Currently placeholder - needs implementation
 - **How to get**: 
   1. Go to https://aistudio.google.com/app/apikey
   2. Create API key
   3. Copy and set in `.env`
+
+#### `GEMINI_MODEL`
+- **Type**: Optional
+- **Description**: Google Gemini model name to use for reasoning
+- **Default**: `gemini-3-flash-preview`
+- **Example**: `gemini-3-flash-preview`, `gemini-pro`, `gemini-1.5-pro`
+- **Used by**: `GeminiReasoningAdapter` for selecting the model
+- **Where**: `apps/api/src/reasoning/reasoning.adapter.ts`
+- **Note**: Gemini 3 Flash Preview is recommended for free tier usage
 
 ---
 

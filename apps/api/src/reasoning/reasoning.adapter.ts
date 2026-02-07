@@ -31,9 +31,10 @@ export class GeminiReasoningAdapter {
 
   constructor() {
     const apiKey = process.env.GEMINI_API_KEY;
+    const modelName = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
-      this.logger.log("Gemini API initialized with API key");
+      this.logger.log(`Gemini API initialized with model: ${modelName}`);
     } else {
       this.genAI = null;
       this.logger.warn("GEMINI_API_KEY not set - Gemini reasoning will fail. Set GEMINI_API_KEY in .env file.");
@@ -55,8 +56,9 @@ export class GeminiReasoningAdapter {
         );
       }
 
-      // Use Gemini Pro model
-      const model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+      // Use Gemini model from environment variable (default: gemini-3-flash-preview)
+      const modelName = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
+      const model = this.genAI.getGenerativeModel({ model: modelName });
 
       // Combine system and user prompts
       const fullPrompt = `${prompt.system}\n\n${prompt.user}`;
