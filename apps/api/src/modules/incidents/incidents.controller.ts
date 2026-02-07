@@ -26,6 +26,7 @@ import { InvestigationService } from "../../investigation/investigation.service"
 import { StartInvestigationRequestSchema, StartInvestigationResponseSchema, InvestigationStatusSchema } from "@chronosops/contracts";
 import { assertCanViewSensitiveData } from "../../auth/rbac.assert";
 import { redactEvidenceBundle } from "../../policy/redaction";
+import { buildExplainabilityGraph } from "./analysis/explainability-graph.builder";
 
 @Controller("v1/incidents")
 export class IncidentsController {
@@ -1706,6 +1707,105 @@ export class IncidentsController {
       console.error('[IncidentsController.compareAnalyses] Error:', error?.message || error);
       throw new HttpException(
         `Failed to compare analyses: ${error?.message || 'Unknown error'}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
+  @Get(':incidentId/analyses/:analysisId/explainability-graph')
+  async getExplainabilityGraph(
+    @Param('incidentId') incidentId: string,
+    @Param('analysisId') analysisId: string,
+  ) {
+    try {
+      // Load incident
+      const incident = await this.prisma.incident.findUnique({
+        where: { id: incidentId },
+      });
+
+      if (!incident) {
+        throw new HttpException(`Incident not found: ${incidentId}`, HttpStatus.NOT_FOUND);
+      }
+
+      // Load analysis
+      const analysis = await this.prisma.incidentAnalysis.findUnique({
+        where: { id: analysisId },
+        select: {
+          id: true,
+          reasoningJson: true,
+          evidenceCompleteness: true,
+          evidenceBundleId: true,
+          createdAt: true,
+        },
+      });
+
+      if (!analysis) {
+        throw new HttpException(`Analysis not found: ${analysisId}`, HttpStatus.NOT_FOUND);
+      }
+
+      // Verify analysis belongs to incident
+      if (analysis.evidenceBundleId === null) {
+        throw new HttpException(
+          `Analysis ${analysisId} has no evidence bundle`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Load evidence bundle
+      const evidenceBundle = await this.prisma.evidenceBundle.findUnique({
+        where: { id: analysis.evidenceBundleId },
+        select: {
+          bundleId: true,
+          payload: true,
+        },
+      });
+
+      if (!evidenceBundle) {
+        throw new HttpException(
+          `Evidence bundle not found for analysis ${analysisId}`,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      // Load postmortem (optional)
+      const postmortem = await this.prisma.postmortem.findFirst({
+        where: {
+          incidentId,
+          createdAt: {
+            gte: new Date(analysis.createdAt.getTime() - 60000), // Within 1 minute of analysis
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          json: true,
+        },
+      });
+
+      // Build graph
+      const graph = buildExplainabilityGraph({
+        incidentId,
+        analysisId,
+        analysis: {
+          reasoningJson: analysis.reasoningJson,
+          evidenceCompleteness: analysis.evidenceCompleteness,
+          evidenceBundleId: analysis.evidenceBundleId,
+        },
+        evidenceBundle: {
+          bundleId: evidenceBundle.bundleId,
+          payload: evidenceBundle.payload,
+        },
+        postmortem: postmortem || null,
+      });
+
+      return graph;
+    } catch (error: any) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.error('[IncidentsController.getExplainabilityGraph] Error:', error?.message || error);
+      throw new HttpException(
+        `Failed to build explainability graph: ${error?.message || 'Unknown error'}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

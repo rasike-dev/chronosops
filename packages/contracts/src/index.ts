@@ -158,3 +158,6 @@ export * from "./analysis/analysis-compare.schema";
 
 /** Investigation */
 export * from "./investigation/investigation.schema";
+
+/** UI */
+export * from "./ui/explainability-graph.schema";
