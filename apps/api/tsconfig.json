@@ -1,22 +1,26 @@
 {
     "compilerOptions": {
-      "module": "commonjs",
-      "declaration": true,
-      "removeComments": true,
-      "emitDecoratorMetadata": true,
-      "experimentalDecorators": true,
-      "allowSyntheticDefaultImports": true,
-      "esModuleInterop": true,
-      "moduleResolution": "node",
-      "target": "ES2022",
-      "sourceMap": true,
-      "outDir": "./dist",
-      "baseUrl": "./",
-      "incremental": true,
-      "skipLibCheck": true,
-      "strict": true,
-      "typeRoots": ["./node_modules/@types", "../node_modules/@types", "../../node_modules/@types"]
+        "module": "commonjs",
+        "declaration": true,
+        "removeComments": true,
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true,
+        "moduleResolution": "node",
+        "target": "ES2022",
+        "sourceMap": true,
+        "outDir": "./dist",
+        "baseUrl": "./",
+        "paths": {
+          "@chronosops/contracts": ["../../packages/contracts/dist"]
+        },
+        "incremental": true,
+        "skipLibCheck": true,
+        "strict": true,
+        "typeRoots": ["./node_modules/@types", "../node_modules/@types", "../../node_modules/@types"]
     },
-    "include": ["src/**/*", "prisma.config.ts"]
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "dist", "generated", "prisma.config.ts"]
   }
   

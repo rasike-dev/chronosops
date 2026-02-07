@@ -20,7 +20,7 @@ export class RolesGuard implements CanActivate {
     const user = req.user as CurrentUser | undefined
 
     const userRoles = Array.isArray(user?.roles) ? user!.roles : []
-    const ok = required.some((r) => userRoles.includes(r))
+    const ok = required.some((r: string) => userRoles.includes(r))
 
     if (!ok) {
       throw new ForbiddenException({

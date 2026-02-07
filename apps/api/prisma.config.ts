@@ -24,12 +24,16 @@ if (existsSync(rootEnv)) {
 // Load the .env file
 config({ path: envPath })
 
+// For prisma generate, DATABASE_URL is not required (only needed for migrations/connections)
+// Use a dummy URL if not set
+const databaseUrl = process.env.DATABASE_URL || 'postgresql://localhost:5432/chronosops'
+
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
   },
   datasource: {
-    url: env('DATABASE_URL'),
+    url: databaseUrl,
   },
 })

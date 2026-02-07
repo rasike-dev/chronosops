@@ -8,9 +8,10 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/jwt-auth.guard";
 import { RolesGuard } from "./auth/roles.guard";
+import { GoogleIntegrationModule } from "./integrations/google/google.module";
 
 @Module({
-  imports: [PrismaModule, HealthModule, ScenarioModule, IncidentsModule, VersionModule, AuthModule],
+  imports: [PrismaModule, HealthModule, ScenarioModule, IncidentsModule, VersionModule, AuthModule, GoogleIntegrationModule],
   providers: [
     {
       provide: APP_GUARD,

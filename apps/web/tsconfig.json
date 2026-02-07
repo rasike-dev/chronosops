@@ -23,7 +23,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@chronosops/contracts": ["../../packages/contracts/src"]
     }
   },
   "include": [

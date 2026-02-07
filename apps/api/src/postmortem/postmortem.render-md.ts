@@ -1,0 +1,159 @@
+import type { PostmortemV2 } from "@chronosops/contracts";
+
+export function renderPostmortemMarkdown(postmortem: PostmortemV2): string {
+  const lines: string[] = [];
+
+  // Title
+  lines.push(`# ${postmortem.summary.headline}`);
+  lines.push("");
+  lines.push(`**Incident ID:** ${postmortem.incidentId}`);
+  lines.push(`**Analysis ID:** ${postmortem.analysisId}`);
+  lines.push(`**Generated:** ${new Date(postmortem.generatedAt).toLocaleString()}`);
+  lines.push(`**Generator Version:** ${postmortem.generatorVersion}`);
+  lines.push("");
+
+  // Source
+  if (postmortem.source.sourceType === "GOOGLE_CLOUD" && postmortem.source.sourceUrl) {
+    lines.push(`**Source:** [Google Cloud Status](${postmortem.source.sourceUrl})`);
+    if (postmortem.source.sourceRef) {
+      lines.push(`**Source Reference:** ${postmortem.source.sourceRef}`);
+    }
+    lines.push("");
+  }
+
+  // Overview
+  lines.push("## Overview");
+  lines.push("");
+  lines.push(postmortem.summary.impact);
+  lines.push("");
+  lines.push(`**Confidence:** ${Math.round(postmortem.summary.confidence * 100)}%`);
+  lines.push("");
+
+  // Timeline
+  lines.push("## Timeline");
+  lines.push("");
+  lines.push(`- **Start:** ${new Date(postmortem.timeline.start).toLocaleString()}`);
+  lines.push(`- **End:** ${new Date(postmortem.timeline.end).toLocaleString()}`);
+  if (postmortem.timeline.notes.length > 0) {
+    lines.push("");
+    lines.push("**Notes:**");
+    for (const note of postmortem.timeline.notes) {
+      lines.push(`- ${note}`);
+    }
+  }
+  lines.push("");
+
+  // Evidence Summary
+  lines.push("## Evidence Summary");
+  lines.push("");
+  lines.push(`- **Evidence Bundle ID:** \`${postmortem.evidence.bundleId}\``);
+  lines.push(`- **Completeness Score:** ${postmortem.evidence.completenessScore}/100`);
+  lines.push(`- **Artifacts Collected:** ${postmortem.evidence.artifactSummaries.length}`);
+  lines.push("");
+
+  if (postmortem.evidence.artifactSummaries.length > 0) {
+    lines.push("### Artifacts");
+    lines.push("");
+    for (const artifact of postmortem.evidence.artifactSummaries) {
+      lines.push(`#### ${artifact.title} (${artifact.kind})`);
+      lines.push("");
+      lines.push(`**ID:** \`${artifact.artifactId}\``);
+      lines.push("");
+      lines.push(artifact.summary);
+      lines.push("");
+    }
+  }
+
+  if (postmortem.evidence.missing.length > 0) {
+    lines.push("### Missing Evidence");
+    lines.push("");
+    for (const missing of postmortem.evidence.missing) {
+      lines.push(`- ${missing}`);
+    }
+    lines.push("");
+  }
+
+  // Reasoning
+  lines.push("## Reasoning");
+  lines.push("");
+  lines.push(`**Primary Signal:** ${postmortem.reasoning.primarySignal}`);
+  lines.push("");
+  lines.push(postmortem.reasoning.rationale);
+  lines.push("");
+
+  // Root Cause Hypotheses
+  lines.push("## Root Cause Hypotheses");
+  lines.push("");
+  for (let i = 0; i < postmortem.reasoning.topHypotheses.length; i++) {
+    const hyp = postmortem.reasoning.topHypotheses[i];
+    lines.push(`### ${i + 1}. ${hyp.title} (${Math.round(hyp.confidence * 100)}% confidence)`);
+    lines.push("");
+    lines.push(hyp.rationale);
+    if (hyp.evidenceRefs.length > 0) {
+      lines.push("");
+      lines.push("**Evidence References:**");
+      for (const ref of hyp.evidenceRefs) {
+        lines.push(`- \`${ref}\``);
+      }
+    }
+    lines.push("");
+  }
+
+  // Recommended Actions
+  if (postmortem.actions.length > 0) {
+    lines.push("## Recommended Actions");
+    lines.push("");
+    for (const action of postmortem.actions) {
+      lines.push(`### ${action.title} (${action.priority})`);
+      lines.push("");
+      for (const step of action.steps) {
+        lines.push(`- ${step}`);
+      }
+      if (action.evidenceRefs.length > 0) {
+        lines.push("");
+        lines.push("**Evidence References:**");
+        for (const ref of action.evidenceRefs) {
+          lines.push(`- \`${ref}\``);
+        }
+      }
+      lines.push("");
+    }
+  }
+
+  // Missing Evidence / Next Steps
+  if (postmortem.evidence.missing.length > 0) {
+    lines.push("## Missing Evidence / Next Steps");
+    lines.push("");
+    for (const missing of postmortem.evidence.missing) {
+      lines.push(`- ${missing}`);
+    }
+    lines.push("");
+  }
+
+  // References
+  lines.push("## References");
+  lines.push("");
+  for (const ref of postmortem.references) {
+    if (ref.kind === "EVIDENCE_BUNDLE") {
+      lines.push(`- **Evidence Bundle:** \`${ref.ref}\``);
+      if (ref.hash) {
+        lines.push(`  - Hash: \`${ref.hash}\``);
+      }
+    } else if (ref.kind === "PROMPT_TRACE") {
+      lines.push(`- **Prompt Trace:** \`${ref.ref}\``);
+      if (ref.hash) {
+        lines.push(`  - Response Hash: \`${ref.hash}\``);
+      }
+    } else if (ref.kind === "ANALYSIS") {
+      lines.push(`- **Analysis:** \`${ref.ref}\``);
+    }
+  }
+  lines.push("");
+
+  // Footer
+  lines.push("---");
+  lines.push(`Generated by ChronosOps MVP (${postmortem.generatorVersion})`);
+  lines.push(`Evidence Bundle: \`${postmortem.evidence.bundleId}\``);
+
+  return lines.join("\n");
+}

@@ -7,6 +7,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum IncidentSourceType {
+  SCENARIO
+  GOOGLE_CLOUD
+}
+
 model Incident {
   id          String   @id @default(cuid())
   scenarioId  String
@@ -15,8 +20,17 @@ model Incident {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  sourceType   IncidentSourceType @default(SCENARIO)
+  sourceRef    String?
+  sourcePayload Json?
+
   analyses    IncidentAnalysis[]
   postmortems Postmortem[]
+  evidenceBundles EvidenceBundle[]
+  promptTraces PromptTrace[]
+
+  @@index([sourceType])
+  @@index([sourceRef])
 }
 
 model IncidentAnalysis {
@@ -28,7 +42,39 @@ model IncidentAnalysis {
   requestJson Json
   resultJson  Json
 
+  evidenceBundleId String?
+  evidenceBundle   EvidenceBundle? @relation(fields: [evidenceBundleId], references: [id])
+
+  // Evidence completeness scoring
+  evidenceCompleteness Json?
+
+  // Reasoning response (from Gemini adapter)
+  reasoningJson Json?
+
   incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  promptTraces PromptTrace[]
+
+  @@index([evidenceBundleId])
+}
+
+model EvidenceBundle {
+  id          String   @id @default(cuid())
+  bundleId    String   @unique
+  incidentId  String
+  createdAt   DateTime @default(now())
+  createdBy  String?
+
+  sources     String[] // simple for v1; can normalize later
+  payload     Json     // stores EvidenceBundle (minus bundleId fields ok)
+
+  hashAlgo    String
+  hashInputVersion String
+
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  analyses    IncidentAnalysis[]
+
+  @@index([incidentId])
+  @@index([createdAt])
 }
 
 model Postmortem {
@@ -39,5 +85,38 @@ model Postmortem {
   markdown    String
   json        Json
 
+  generatorVersion String?
+
   incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}
+
+model PromptTrace {
+  id              String   @id @default(cuid())
+  incidentId       String
+  analysisId       String
+  evidenceBundleId String
+
+  createdAt        DateTime @default(now())
+
+  model            String
+  promptVersion    String
+
+  // hashes for integrity
+  promptHash       String
+  requestHash      String
+  responseHash     String
+
+  // stored payloads (bounded)
+  systemPrompt     String
+  userPrompt       String
+  requestJson      Json
+  responseJson     Json
+
+  incident         Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  analysis         IncidentAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@index([analysisId])
+  @@index([evidenceBundleId])
+  @@index([createdAt])
 }

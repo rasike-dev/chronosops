@@ -8,12 +8,18 @@ export class IncidentsPersistenceService {
   async createIncident(params: {
     scenarioId: string;
     title?: string | null;
+    sourceType?: 'SCENARIO' | 'GOOGLE_CLOUD';
+    sourceRef?: string | null;
+    sourcePayload?: unknown | null;
   }) {
     return this.prisma.incident.create({
       data: {
         scenarioId: params.scenarioId,
         title: params.title ?? null,
         status: 'analyzed',
+        sourceType: params.sourceType ?? 'SCENARIO',
+        sourceRef: params.sourceRef ?? null,
+        sourcePayload: params.sourcePayload ? (params.sourcePayload as any) : null,
       },
     });
   }
@@ -26,13 +32,46 @@ export class IncidentsPersistenceService {
     incidentId: string;
     requestJson: unknown;
     resultJson: unknown;
+    evidenceBundleId?: string | null;
+    evidenceCompleteness?: unknown | null;
+    reasoningJson?: unknown | null;
   }) {
     return this.prisma.incidentAnalysis.create({
       data: {
         incidentId: params.incidentId,
         requestJson: params.requestJson as any,
         resultJson: params.resultJson as any,
+        evidenceBundleId: params.evidenceBundleId ?? null,
+        evidenceCompleteness: params.evidenceCompleteness ? (params.evidenceCompleteness as any) : null,
+        reasoningJson: params.reasoningJson ? (params.reasoningJson as any) : null,
       },
+    });
+  }
+
+  /**
+   * Upsert evidence bundle (content-addressed, immutable)
+   */
+  async upsertEvidenceBundle(params: {
+    bundleId: string;
+    incidentId: string;
+    createdBy?: string | null;
+    sources: string[];
+    payload: unknown;
+    hashAlgo: string;
+    hashInputVersion: string;
+  }) {
+    return this.prisma.evidenceBundle.upsert({
+      where: { bundleId: params.bundleId },
+      create: {
+        bundleId: params.bundleId,
+        incidentId: params.incidentId,
+        createdBy: params.createdBy ?? null,
+        sources: params.sources,
+        payload: params.payload as any,
+        hashAlgo: params.hashAlgo,
+        hashInputVersion: params.hashInputVersion,
+      },
+      update: {}, // Immutable by content - if hash matches, bundle is identical
     });
   }
 
@@ -44,12 +83,14 @@ export class IncidentsPersistenceService {
     incidentId: string;
     markdown: string;
     json: unknown;
+    generatorVersion?: string | null;
   }) {
     return this.prisma.postmortem.create({
       data: {
         incidentId: params.incidentId,
         markdown: params.markdown,
         json: params.json as any,
+        generatorVersion: params.generatorVersion ?? null,
       },
     });
   }

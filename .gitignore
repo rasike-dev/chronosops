@@ -64,6 +64,10 @@ coverage/
 dist/
 *.js.map
 
+# TypeScript build outputs
+packages/contracts/src/**/*.js
+packages/contracts/src/**/*.d.ts
+
 # Package manager
 .pnpm-store/
 .yarn/

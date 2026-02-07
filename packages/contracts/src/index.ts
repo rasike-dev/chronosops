@@ -90,3 +90,67 @@ export const AnalyzeIncidentResponseSchema = z.object({
 });
 export type AnalyzeIncidentResponse = z.infer<typeof AnalyzeIncidentResponseSchema>;
 
+/** Incident Source Type */
+export const IncidentSourceTypeSchema = z.enum(["SCENARIO", "GOOGLE_CLOUD"]);
+export type IncidentSourceType = z.infer<typeof IncidentSourceTypeSchema>;
+
+/** Incident schema (for responses) */
+export const IncidentSchema = z.object({
+  id: z.string(),
+  scenarioId: z.string(),
+  title: z.string().nullable().optional(),
+  status: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
+  sourceType: IncidentSourceTypeSchema.default("SCENARIO"),
+  sourceRef: z.string().min(1).max(512).nullable().optional(),
+  sourcePayload: z.unknown().nullable().optional(),
+});
+export type Incident = z.infer<typeof IncidentSchema>;
+
+/** Create Incident request (for creating incidents) */
+export const CreateIncidentRequestSchema = z.object({
+  scenarioId: z.string(),
+  title: z.string().nullable().optional(),
+  sourceType: IncidentSourceTypeSchema.optional(),
+  sourceRef: z.string().min(1).max(512).nullable().optional(),
+  sourcePayload: z.unknown().nullable().optional(),
+});
+export type CreateIncidentRequest = z.infer<typeof CreateIncidentRequestSchema>;
+
+/** Import Google Incidents */
+export * from "./import-google.schema";
+
+/** Google Evidence Lite */
+export * from "./evidence/google-evidence-lite.schema";
+
+/** Evidence Bundle */
+export * from "./evidence/evidence-bundle.schema";
+
+/** Metrics Evidence */
+export * from "./evidence/metrics-evidence.schema";
+
+/** Deployments Evidence */
+export * from "./evidence/deploys-evidence.schema";
+
+/** Config Diff Evidence */
+export * from "./evidence/configdiff-evidence.schema";
+
+/** Logs Evidence */
+export * from "./evidence/logs-evidence.schema";
+
+/** Traces Evidence */
+export * from "./evidence/traces-evidence.schema";
+
+/** Evidence Completeness */
+export * from "./evidence/evidence-completeness.schema";
+
+/** Reasoning */
+export * from "./reasoning/reasoning.schema";
+export * from "./reasoning/hypothesis-catalog.schema";
+
+/** Postmortem */
+export * from "./postmortem/postmortem-v2.schema";
+
+/** Analysis Compare */
+export * from "./analysis/analysis-compare.schema";
