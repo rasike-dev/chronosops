@@ -15,6 +15,8 @@ import { hashPromptParts, hashRequest, hashResponse } from "../reasoning/trace.h
 import { planCollectors, type CollectorType } from "./collector-plan";
 import { applyEvidenceRequestPolicy } from "./evidence-request.policy";
 import { mapRequestsToCollectors, buildCollectContext } from "./evidence-request.mapper";
+import { assertCanInvestigate } from "../auth/rbac.assert";
+import { checkCollectorPolicy } from "../policy/collector.policy";
 import type { CurrentUser } from "../auth/auth.types";
 
 const logger = new Logger("InvestigationService");
@@ -51,6 +53,9 @@ export class InvestigationService {
 
   async startInvestigation(params: StartInvestigationParams): Promise<{ sessionId: string; status: string }> {
     const { incidentId, maxIterations, confidenceTarget, user } = params;
+
+    // Day 18: Enforce RBAC in service layer (non-bypassable)
+    assertCanInvestigate(user);
 
     // Verify incident exists
     const incident = await this.prisma.incident.findUnique({
@@ -311,6 +316,7 @@ export class InvestigationService {
             rejectedRequests = policyResult.rejectedRequests.map(r => ({
               request: r.request,
               reason: r.reason,
+              code: r.code, // Day 18: Include rejection code for audit
             }));
 
             if (approvedRequests.length > 0) {
@@ -338,9 +344,23 @@ export class InvestigationService {
             config: this.configDiffCollector,
           });
 
-          // Run collectors with request-specific context
+          // Run collectors with request-specific context (Day 18: check collector policy)
           const collectorResults = await Promise.all(
             mappings.map(({ collector, request }) => {
+              // Day 18: Check collector policy
+              const policyDecision = checkCollectorPolicy(request.need, "REAL");
+              
+              if (!policyDecision.allowed) {
+                logger.warn(`Collector ${request.need} blocked by policy: ${policyDecision.reason}`);
+                return null; // Skip this collector
+              }
+
+              if (policyDecision.forcedMode === "STUB") {
+                logger.log(`Collector ${request.need} forced to STUB mode: ${policyDecision.reason}`);
+                // TODO: Pass forcedMode to collector if it supports it
+                // For now, collectors will use their default mode
+              }
+
               const reqContext = buildCollectContext(
                 request,
                 {
@@ -379,9 +399,22 @@ export class InvestigationService {
             collectorsToRun.push({ type: "CONFIG", collector: this.configDiffCollector });
           }
 
-          // Run collectors in parallel
+          // Run collectors in parallel (Day 18: check collector policy)
           const collectorResults = await Promise.all(
             collectorsToRun.map(({ collector, type }) => {
+              // Day 18: Check collector policy
+              const policyDecision = checkCollectorPolicy(type, "REAL");
+              
+              if (!policyDecision.allowed) {
+                logger.warn(`Collector ${type} blocked by policy: ${policyDecision.reason}`);
+                return null; // Skip this collector
+              }
+
+              if (policyDecision.forcedMode === "STUB") {
+                logger.log(`Collector ${type} forced to STUB mode: ${policyDecision.reason}`);
+                // TODO: Pass forcedMode to collector if it supports it
+              }
+
               executedCollectors.push(type);
               return collector.collect(collectContext);
             })

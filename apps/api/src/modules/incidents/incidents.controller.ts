@@ -24,6 +24,8 @@ import { renderPostmortemMarkdown } from "../../postmortem/postmortem.render-md"
 import { AnalysisCompareService } from "./analysis/analysis-compare.service";
 import { InvestigationService } from "../../investigation/investigation.service";
 import { StartInvestigationRequestSchema, StartInvestigationResponseSchema, InvestigationStatusSchema } from "@chronosops/contracts";
+import { assertCanViewSensitiveData } from "../../auth/rbac.assert";
+import { redactEvidenceBundle } from "../../policy/redaction";
 
 @Controller("v1/incidents")
 export class IncidentsController {
@@ -71,7 +73,7 @@ export class IncidentsController {
 
   @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
   @Get(':id')
-  async detail(@Param('id') id: string) {
+  async detail(@Param('id') id: string, @Req() httpReq: { user?: CurrentUser }) {
     try {
       const incident = await this.prisma.incident.findUnique({
         where: { id },
@@ -89,6 +91,18 @@ export class IncidentsController {
       
       if (!incident) {
         throw new HttpException(`Incident not found: ${id}`, HttpStatus.NOT_FOUND);
+      }
+      
+      // Day 18: Data exposure control - hide sourcePayload from non-admin
+      const isAdmin = httpReq.user?.roles?.includes("CHRONOSOPS_ADMIN");
+      if (!isAdmin && incident.sourcePayload) {
+        const { sourcePayload, ...rest } = incident;
+        return {
+          ...rest,
+          sourceType: incident.sourceType,
+          sourceRef: incident.sourceRef,
+          // Return normalized form only (sourcePayload hidden)
+        };
       }
       
       return incident;
@@ -1574,7 +1588,7 @@ export class IncidentsController {
 
   @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
   @Get("evidence-bundles/:bundleId")
-  async getEvidenceBundle(@Param('bundleId') bundleId: string) {
+  async getEvidenceBundle(@Param('bundleId') bundleId: string, @Req() httpReq: { user?: CurrentUser }) {
     try {
       const bundle = await this.prisma.evidenceBundle.findUnique({
         where: { bundleId },
@@ -1594,13 +1608,17 @@ export class IncidentsController {
         throw new HttpException(`Evidence bundle not found: ${bundleId}`, HttpStatus.NOT_FOUND);
       }
 
+      // Day 18: Redact sensitive data from evidence bundle payload
+      const isAdmin = httpReq.user?.roles?.includes("CHRONOSOPS_ADMIN");
+      const redactedPayload = isAdmin ? bundle.payload : redactEvidenceBundle(bundle.payload);
+
       return {
         bundleId: bundle.bundleId,
         incidentId: bundle.incidentId,
         createdAt: bundle.createdAt.toISOString(),
         createdBy: bundle.createdBy,
         sources: bundle.sources,
-        payload: bundle.payload,
+        payload: redactedPayload,
         hashAlgo: bundle.hashAlgo,
         hashInputVersion: bundle.hashInputVersion,
       };
