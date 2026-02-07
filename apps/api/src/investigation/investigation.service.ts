@@ -13,6 +13,8 @@ import { buildReasoningRequest } from "../reasoning/reasoning.request-builder";
 import { selectHypothesisCandidates } from "../reasoning/hypotheses/preselector";
 import { hashPromptParts, hashRequest, hashResponse } from "../reasoning/trace.hash";
 import { planCollectors, type CollectorType } from "./collector-plan";
+import { applyEvidenceRequestPolicy } from "./evidence-request.policy";
+import { mapRequestsToCollectors, buildCollectContext } from "./evidence-request.mapper";
 import type { CurrentUser } from "../auth/auth.types";
 
 const logger = new Logger("InvestigationService");
@@ -210,50 +212,197 @@ export class InvestigationService {
           }
         }
 
-        // Compute completeness to determine missing needs
+        // Day 17: First run reasoning on existing bundle to get model requests
+        // Then collect evidence based on model requests (if approved) or fallback
+        
+        // Compute completeness for initial reasoning
         let completeness = null;
         let missingNeeds: any[] = [];
         if (latestBundle) {
           completeness = computeEvidenceCompleteness({
             incidentSourceType: incident.sourceType,
-            primarySignal: "UNKNOWN", // Will be updated after analysis
+            primarySignal: "UNKNOWN",
             bundle: latestBundle,
           });
           missingNeeds = completeness.missing || [];
           previousCompletenessScore = completeness.score;
         }
 
-        // Plan which collectors to run
-        const plan = planCollectors(missingNeeds, existingSources);
-        logger.log(`Collector plan for iteration ${iteration}: ${plan.reason}`);
+        // Build initial bundle reference for reasoning
+        let bundle = latestBundle || {
+          bundleId: `temp-${incidentId}-${iteration}`,
+          artifacts: [],
+          sources: [],
+        };
 
-        // Collect evidence based on plan
+        // Run reasoning first to get model requests (Day 17)
+        let reasoningResponse = null;
+        let reasoningResult: any = null;
+        let reasoningRequest: any = null;
+        let modelRequests: any[] = [];
+        let approvedRequests: any[] = [];
+        let rejectedRequests: any[] = [];
+        let executedCollectors: string[] = [];
+        let useModelRequests = false;
+
+        try {
+          const artifacts = bundle.artifacts || [];
+          const artifactKinds = new Set(artifacts.map((a: any) => a.kind));
+          const sources = bundle.sources || [];
+
+          const candidates = selectHypothesisCandidates({
+            primarySignal: "UNKNOWN",
+            completenessScore: completeness?.score || 0,
+            has: {
+              metrics: artifactKinds.has("metrics_summary") || sources.includes("GCP_METRICS"),
+              logs: artifactKinds.has("logs_summary") || sources.includes("GCP_LOGS"),
+              traces: artifactKinds.has("traces_summary") || sources.includes("GCP_TRACES"),
+              deploys: artifactKinds.has("deploys_summary") || sources.includes("DEPLOYS"),
+              config: artifactKinds.has("config_diff_summary") || sources.includes("CONFIG"),
+              googleStatus: incident.sourceType === "GOOGLE_CLOUD",
+            },
+            flags: {
+              recentDeploy: artifactKinds.has("deploys_summary") || sources.includes("DEPLOYS"),
+              configChanged: artifactKinds.has("config_diff_summary") || sources.includes("CONFIG"),
+              newErrorSignature: artifactKinds.has("logs_summary") || sources.includes("GCP_LOGS"),
+              timeouts: artifactKinds.has("traces_summary") || sources.includes("GCP_TRACES"),
+            },
+          });
+
+          // Use existing bundle ID or create a temporary one
+          const bundleIdForReasoning = latestBundle?.bundleId || `temp-${incidentId}-${iteration}`;
+
+          reasoningRequest = buildReasoningRequest({
+            incidentId,
+            evidenceBundleId: bundleIdForReasoning,
+            sourceType: incident.sourceType,
+            incidentSummary: `Investigation iteration ${iteration}`,
+            timeline: {
+              start: collectContext.window.start,
+              end: collectContext.window.end,
+            },
+            artifacts: artifacts.map((a: any) => ({
+              artifactId: a.artifactId || a.kind,
+              kind: a.kind,
+              title: a.title || a.kind,
+              summary: a.summary || "",
+            })),
+            candidates,
+          });
+
+          reasoningResult = await this.reasoningAdapter.reason(reasoningRequest);
+          reasoningResponse = reasoningResult.response;
+
+          // Day 17: Check for model evidence requests
+          if (reasoningResponse?.missingEvidenceRequests && reasoningResponse.missingEvidenceRequests.length > 0) {
+            modelRequests = reasoningResponse.missingEvidenceRequests;
+            logger.log(`Model requested ${modelRequests.length} evidence types`);
+
+            // Apply policy gating
+            const policyResult = applyEvidenceRequestPolicy(
+              modelRequests,
+              {
+                start: collectContext.window.start,
+                end: collectContext.window.end,
+              }
+            );
+
+            approvedRequests = policyResult.approvedRequests;
+            rejectedRequests = policyResult.rejectedRequests.map(r => ({
+              request: r.request,
+              reason: r.reason,
+            }));
+
+            if (approvedRequests.length > 0) {
+              useModelRequests = true;
+              logger.log(`Approved ${approvedRequests.length} model requests, rejected ${rejectedRequests.length}`);
+            } else {
+              logger.warn(`All ${modelRequests.length} model requests were rejected`);
+            }
+          }
+        } catch (error: any) {
+          logger.warn(`Reasoning failed in iteration ${iteration}:`, error?.message || error);
+        }
+
+        // Day 17: Collect evidence based on model requests (if approved) or fallback to deterministic plan
         const collectorArtifacts = [];
-        const collectorsToRun: Array<{ type: CollectorType; collector: any }> = [];
+        const fallbackPlan = planCollectors(missingNeeds, existingSources);
 
-        if (plan.collectors.includes("METRICS")) {
-          collectorsToRun.push({ type: "METRICS", collector: this.gcpMetricsCollector });
-        }
-        if (plan.collectors.includes("LOGS")) {
-          collectorsToRun.push({ type: "LOGS", collector: this.logsCollector });
-        }
-        if (plan.collectors.includes("TRACES")) {
-          collectorsToRun.push({ type: "TRACES", collector: this.tracesCollector });
-        }
-        if (plan.collectors.includes("DEPLOYS")) {
-          collectorsToRun.push({ type: "DEPLOYS", collector: this.deploysCollector });
-        }
-        if (plan.collectors.includes("CONFIG")) {
-          collectorsToRun.push({ type: "CONFIG", collector: this.configDiffCollector });
+        if (useModelRequests && approvedRequests.length > 0) {
+          // Use model-directed collection
+          const mappings = mapRequestsToCollectors(approvedRequests, {
+            metrics: this.gcpMetricsCollector,
+            logs: this.logsCollector,
+            traces: this.tracesCollector,
+            deploys: this.deploysCollector,
+            config: this.configDiffCollector,
+          });
+
+          // Run collectors with request-specific context
+          const collectorResults = await Promise.all(
+            mappings.map(({ collector, request }) => {
+              const reqContext = buildCollectContext(
+                request,
+                {
+                  start: collectContext.window.start,
+                  end: collectContext.window.end,
+                },
+                incidentId,
+                collectContext.hints
+              );
+              executedCollectors.push(request.need);
+              return collector.collect(reqContext);
+            })
+          );
+
+          for (const result of collectorResults) {
+            if (result) collectorArtifacts.push(result);
+          }
+        } else {
+          // Fallback to deterministic plan (Day 16 behavior)
+          logger.log(`Using fallback plan: ${fallbackPlan.reason}`);
+          const collectorsToRun: Array<{ type: CollectorType; collector: any }> = [];
+
+          if (fallbackPlan.collectors.includes("METRICS")) {
+            collectorsToRun.push({ type: "METRICS", collector: this.gcpMetricsCollector });
+          }
+          if (fallbackPlan.collectors.includes("LOGS")) {
+            collectorsToRun.push({ type: "LOGS", collector: this.logsCollector });
+          }
+          if (fallbackPlan.collectors.includes("TRACES")) {
+            collectorsToRun.push({ type: "TRACES", collector: this.tracesCollector });
+          }
+          if (fallbackPlan.collectors.includes("DEPLOYS")) {
+            collectorsToRun.push({ type: "DEPLOYS", collector: this.deploysCollector });
+          }
+          if (fallbackPlan.collectors.includes("CONFIG")) {
+            collectorsToRun.push({ type: "CONFIG", collector: this.configDiffCollector });
+          }
+
+          // Run collectors in parallel
+          const collectorResults = await Promise.all(
+            collectorsToRun.map(({ collector, type }) => {
+              executedCollectors.push(type);
+              return collector.collect(collectContext);
+            })
+          );
+
+          for (const result of collectorResults) {
+            if (result) collectorArtifacts.push(result);
+          }
         }
 
-        // Run collectors in parallel
-        const collectorResults = await Promise.all(
-          collectorsToRun.map(({ collector }) => collector.collect(collectContext))
-        );
-
-        for (const result of collectorResults) {
-          if (result) collectorArtifacts.push(result);
+        // Day 17: Check stop condition - if model requested evidence but all were rejected
+        if (useModelRequests && approvedRequests.length === 0 && modelRequests.length > 0) {
+          logger.log(`All model evidence requests rejected in iteration ${iteration}, stopping`);
+          await this.prisma.investigationSession.update({
+            where: { id: sessionId },
+            data: {
+              status: "STOPPED",
+              reason: "NO_APPROVED_EVIDENCE_REQUESTS: All model evidence requests were rejected by policy",
+            },
+          });
+          break;
         }
 
         // If no new collectors were run and no new artifacts, check if we should stop
@@ -270,12 +419,11 @@ export class InvestigationService {
         }
 
         // Build or augment evidence bundle
-        let bundle;
         if (latestBundle && collectorArtifacts.length === 0) {
           // Reuse existing bundle if no new artifacts
           bundle = latestBundle;
         } else {
-          // Build new bundle (will merge with existing if needed)
+          // Build new bundle
           const googleEvidenceLite = latestBundle?.googleEvidenceLite || null;
           const scenarioTelemetrySummary = latestBundle?.artifacts?.find((a: any) => a.kind === "telemetry_summary")?.payload || null;
 
@@ -302,27 +450,35 @@ export class InvestigationService {
         // Recompute completeness with new bundle
         completeness = computeEvidenceCompleteness({
           incidentSourceType: incident.sourceType,
-          primarySignal: "UNKNOWN", // Will be updated after reasoning
+          primarySignal: reasoningResponse?.explainability?.primarySignal === "LATENCY" ? "latency" :
+                         reasoningResponse?.explainability?.primarySignal === "ERRORS" ? "errors" : "UNKNOWN",
           bundle: savedBundle.payload,
         });
 
-        // Build analysis result (simplified - reuse existing logic pattern)
+        // Build analysis result
         const artifacts = bundle.artifacts || [];
-        const artifactKinds = new Set(artifacts.map((a: any) => a.kind));
-        const sources = bundle.sources || [];
-
-        // Generate basic analysis result
         const analysisResult: any = {
           incidentId,
           summary: `Investigation iteration ${iteration} analysis`,
-          likelyRootCauses: [],
+          likelyRootCauses: reasoningResponse?.hypotheses?.map((h: any) => ({
+            rank: h.rank,
+            title: h.title,
+            confidence: h.confidence,
+            evidence: h.evidenceRefs || [],
+            nextActions: h.nextActions || [],
+          })) || [],
           blastRadius: {
             impactedServices: [],
             impactedRoutes: [],
             userImpact: "Unknown",
           },
           questionsToConfirm: [],
-          explainability: {
+          explainability: reasoningResponse?.explainability ? {
+            primarySignal: reasoningResponse.explainability.primarySignal.toLowerCase(),
+            latencyFactor: reasoningResponse.explainability.latencyFactor,
+            errorFactor: reasoningResponse.explainability.errorFactor,
+            rationale: reasoningResponse.explainability.rationale,
+          } : {
             primarySignal: "UNKNOWN" as const,
             latencyFactor: 1.0,
             errorFactor: 1.0,
@@ -331,86 +487,13 @@ export class InvestigationService {
           evidenceTable: [],
         };
 
-        // Update completeness with actual primary signal (if available from reasoning)
-        let reasoningResponse = null;
-        let reasoningResult: any = null;
-        let reasoningRequest: any = null;
-        try {
-          const candidates = selectHypothesisCandidates({
-            primarySignal: "UNKNOWN",
-            completenessScore: completeness.score,
-            has: {
-              metrics: artifactKinds.has("metrics_summary") || sources.includes("GCP_METRICS"),
-              logs: artifactKinds.has("logs_summary") || sources.includes("GCP_LOGS"),
-              traces: artifactKinds.has("traces_summary") || sources.includes("GCP_TRACES"),
-              deploys: artifactKinds.has("deploys_summary") || sources.includes("DEPLOYS"),
-              config: artifactKinds.has("config_diff_summary") || sources.includes("CONFIG"),
-              googleStatus: incident.sourceType === "GOOGLE_CLOUD",
-            },
-            flags: {
-              recentDeploy: artifactKinds.has("deploys_summary") || sources.includes("DEPLOYS"),
-              configChanged: artifactKinds.has("config_diff_summary") || sources.includes("CONFIG"),
-              newErrorSignature: artifactKinds.has("logs_summary") || sources.includes("GCP_LOGS"),
-              timeouts: artifactKinds.has("traces_summary") || sources.includes("GCP_TRACES"),
-            },
-          });
-
-          reasoningRequest = buildReasoningRequest({
-            incidentId,
-            evidenceBundleId: savedBundle.bundleId,
-            sourceType: incident.sourceType,
-            incidentSummary: analysisResult.summary,
-            timeline: {
-              start: collectContext.window.start,
-              end: collectContext.window.end,
-            },
-            artifacts: bundle.artifacts.map((a: any) => ({
-              artifactId: a.artifactId,
-              kind: a.kind,
-              title: a.title,
-              summary: a.summary,
-            })),
-            candidates,
-          });
-
-          reasoningResult = await this.reasoningAdapter.reason(reasoningRequest);
-          reasoningResponse = reasoningResult.response;
-
-          // Update analysis result with reasoning
-          if (reasoningResponse) {
-            analysisResult.likelyRootCauses = reasoningResponse.hypotheses.map((h: any) => ({
-              rank: h.rank,
-              title: h.title,
-              confidence: h.confidence,
-              evidence: h.evidenceRefs || [],
-              nextActions: h.nextActions || [],
-            }));
-            analysisResult.explainability = {
-              primarySignal: reasoningResponse.explainability.primarySignal.toLowerCase(),
-              latencyFactor: reasoningResponse.explainability.latencyFactor,
-              errorFactor: reasoningResponse.explainability.errorFactor,
-              rationale: reasoningResponse.explainability.rationale,
-            };
-
-            // Update completeness with actual primary signal
-            completeness = computeEvidenceCompleteness({
-              incidentSourceType: incident.sourceType,
-              primarySignal: reasoningResponse.explainability.primarySignal === "LATENCY" ? "latency" :
-                             reasoningResponse.explainability.primarySignal === "ERRORS" ? "errors" : "UNKNOWN",
-              bundle: savedBundle.payload,
-            });
-          }
-        } catch (error: any) {
-          logger.warn(`Reasoning failed in iteration ${iteration}:`, error?.message || error);
-        }
-
         // Save analysis
         const newAnalysis = await this.persistence.saveAnalysis({
           incidentId,
           requestJson: {
             investigationSessionId: sessionId,
             iteration,
-            collectorPlan: plan,
+            useModelRequests,
           },
           resultJson: analysisResult,
           evidenceBundleId: savedBundle.id,
@@ -445,7 +528,24 @@ export class InvestigationService {
         const overallConfidence = reasoningResponse?.overallConfidence ?? null;
         const completenessScore = completeness.score;
 
-        // Record iteration
+        // Record iteration with Day 17 audit trail
+        const decisionJson: any = {
+          useModelRequests,
+          modelRequests: modelRequests,
+          approvedRequests: approvedRequests,
+          rejectedRequests: rejectedRequests,
+          executedCollectors: executedCollectors,
+        };
+
+        if (!useModelRequests) {
+          // Include fallback plan info
+          decisionJson.fallbackPlan = {
+            collectors: fallbackPlan.collectors,
+            reason: fallbackPlan.reason,
+          };
+          decisionJson.missingNeeds = missingNeeds;
+        }
+
         const iterationRecord = await this.prisma.investigationIteration.create({
           data: {
             sessionId,
@@ -454,14 +554,10 @@ export class InvestigationService {
             analysisId: newAnalysis.id,
             completenessScore,
             overallConfidence,
-            decisionJson: {
-              collectorPlan: {
-                collectors: plan.collectors,
-                reason: plan.reason,
-              },
-              missingNeeds: missingNeeds,
-            } as any,
-            notes: plan.reason,
+            decisionJson: decisionJson as any,
+            notes: useModelRequests
+              ? `Model-directed: ${approvedRequests.length} approved, ${rejectedRequests.length} rejected`
+              : fallbackPlan.reason,
           },
         });
 

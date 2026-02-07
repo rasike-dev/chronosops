@@ -148,6 +148,7 @@ export * from "./evidence/evidence-completeness.schema";
 /** Reasoning */
 export * from "./reasoning/reasoning.schema";
 export * from "./reasoning/hypothesis-catalog.schema";
+export * from "./reasoning/evidence-request-tool.schema";
 
 /** Postmortem */
 export * from "./postmortem/postmortem-v2.schema";

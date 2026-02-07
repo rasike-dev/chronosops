@@ -34,6 +34,8 @@ export const EvidenceRequestSchema = z.object({
       windowEnd: z.string().optional(),
       service: z.string().optional(),
       region: z.string().optional(),
+      // hard bounds for tool protocol
+      maxItems: z.number().int().min(1).max(200).optional(),
     })
     .optional(),
 });
