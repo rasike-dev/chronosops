@@ -5,11 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiGet, apiPost } from '@/lib/api'
 import { ApiErrorPanel } from '@/components/ApiErrorPanel'
+import { SourceBadge } from '@/components/SourceBadge'
+import { StatusBadge } from '@/components/StatusBadge'
 import type { ScenarioListItem, Scenario, AnalyzeIncidentResponse } from '@chronosops/contracts'
+
+type TabType = 'scenarios' | 'google'
 
 export default function AnalyzePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState<TabType>('scenarios')
   const [scenarioId, setScenarioId] = useState<string>('')
   const [windowBefore, setWindowBefore] = useState(15)
   const [windowAfter, setWindowAfter] = useState(15)
@@ -19,6 +24,7 @@ export default function AnalyzePage() {
     const scenarioIdParam = searchParams.get('scenarioId')
     if (scenarioIdParam) {
       setScenarioId(scenarioIdParam)
+      setActiveTab('scenarios')
     }
   }, [searchParams])
 
@@ -33,16 +39,36 @@ export default function AnalyzePage() {
   const scenarioQuery = useQuery({
     queryKey: ['scenario', scenarioId],
     queryFn: () => apiGet<Scenario>(`/v1/scenarios/${scenarioId}`),
-    enabled: !!scenarioId,
+    enabled: !!scenarioId && activeTab === 'scenarios',
     staleTime: 60_000,
   })
 
-  // Analyze mutation
+  // Fetch Google Cloud incidents
+  const googleIncidentsQuery = useQuery({
+    queryKey: ['google-incidents'],
+    queryFn: () => apiPost<{ incidents: any[]; imported: number }>('/v1/incidents/import/google', {}),
+    enabled: false, // Only fetch on demand
+    staleTime: 30_000,
+  })
+
+  // Analyze mutation (scenario)
   const analyzeMutation = useMutation({
     mutationFn: (data: { scenarioId: string; windowMinutesBefore: number; windowMinutesAfter: number }) =>
       apiPost<AnalyzeIncidentResponse>('/v1/incidents/analyze', data),
     onSuccess: (data) => {
-      // Redirect to incident detail page
+      router.push(`/incidents/${data.incidentId}`)
+    },
+  })
+
+  // Import Google incident mutation
+  const importGoogleMutation = useMutation({
+    mutationFn: (incidentData: any) =>
+      apiPost<AnalyzeIncidentResponse>('/v1/incidents/analyze', {
+        evidence: {
+          googleEvidenceLite: incidentData,
+        },
+      }),
+    onSuccess: (data) => {
       router.push(`/incidents/${data.incidentId}`)
     },
   })
@@ -56,166 +82,301 @@ export default function AnalyzePage() {
     })
   }
 
+  const handleFetchGoogle = () => {
+    googleIncidentsQuery.refetch()
+  }
+
+  const handleImportGoogle = (incident: any) => {
+    importGoogleMutation.mutate(incident)
+  }
+
   return (
-    <div className="p-6">
-      <div className="flex items-start justify-between gap-4">
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold">Analyze Scenario</h1>
+          <h1 className="text-2xl font-semibold">Create Incident</h1>
           <p className="text-gray-600 mt-1">
-            Run a fresh investigation with explainable evidence and ranked root-cause hypotheses.
+            Import from scenarios or real Google Cloud incidents. All sources are unified with full traceability.
           </p>
         </div>
       </div>
 
-      <div className="mt-6 grid lg:grid-cols-2 gap-6">
-        {/* Left: Configuration */}
-        <div className="rounded-xl border bg-white p-6">
-          <h2 className="text-lg font-medium mb-4">Configuration</h2>
+      {/* Source Tabs */}
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="flex gap-4">
+          <button
+            onClick={() => setActiveTab('scenarios')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'scenarios'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            📊 Scenarios
+          </button>
+          <button
+            onClick={() => setActiveTab('google')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'google'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            ☁️ Google Cloud
+          </button>
+        </nav>
+      </div>
 
-          {/* Scenario Selection */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Scenario
-            </label>
-            {scenariosQuery.isLoading && (
-              <div className="text-sm text-gray-600">Loading scenarios…</div>
-            )}
-            {scenariosQuery.isError && (
-              <div className="mt-2">
-                <ApiErrorPanel error={scenariosQuery.error} />
-              </div>
-            )}
-            {scenariosQuery.isSuccess && (
-              <select
-                value={scenarioId}
-                onChange={(e) => setScenarioId(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg bg-white text-sm"
-              >
-                <option value="">Select a scenario…</option>
-                {scenariosQuery.data.map((s) => (
-                  <option key={s.scenarioId} value={s.scenarioId}>
-                    {s.title}
-                  </option>
-                ))}
-              </select>
+      {/* Scenarios Tab */}
+      {activeTab === 'scenarios' && (
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Left: Configuration */}
+          <div className="rounded-xl border bg-white p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <SourceBadge type="SCENARIO" />
+              <h2 className="text-lg font-medium">Scenario Analysis</h2>
+            </div>
+
+            {/* Scenario Selection */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Scenario
+              </label>
+              {scenariosQuery.isLoading && (
+                <div className="text-sm text-gray-600">Loading scenarios…</div>
+              )}
+              {scenariosQuery.isError && (
+                <div className="mt-2">
+                  <ApiErrorPanel error={scenariosQuery.error} />
+                </div>
+              )}
+              {scenariosQuery.isSuccess && (
+                <select
+                  value={scenarioId}
+                  onChange={(e) => setScenarioId(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg bg-white text-sm"
+                >
+                  <option value="">Select a scenario…</option>
+                  {scenariosQuery.data.map((s) => (
+                    <option key={s.scenarioId} value={s.scenarioId}>
+                      {s.title}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Window Configuration */}
+            {scenarioId && (
+              <>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Window Before (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    value={windowBefore}
+                    onChange={(e) => setWindowBefore(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Window After (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    value={windowAfter}
+                    onChange={(e) => setWindowAfter(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+
+                <button
+                  onClick={handleAnalyze}
+                  disabled={analyzeMutation.isPending || !scenarioId}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {analyzeMutation.isPending ? 'Analyzing…' : 'Run Analysis'}
+                </button>
+
+                {analyzeMutation.isError && (
+                  <div className="mt-4">
+                    <ApiErrorPanel error={analyzeMutation.error} />
+                  </div>
+                )}
+              </>
             )}
           </div>
 
-          {/* Window Configuration */}
-          {scenarioId && (
-            <>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Window Before (minutes)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="120"
-                  value={windowBefore}
-                  onChange={(e) => setWindowBefore(Number(e.target.value))}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                />
+          {/* Right: Scenario Preview */}
+          <div className="rounded-xl border bg-white p-6">
+            <h2 className="text-lg font-medium mb-4">Scenario Preview</h2>
+
+            {!scenarioId && (
+              <div className="text-sm text-gray-600">
+                Select a scenario to see details.
               </div>
+            )}
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Window After (minutes)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="120"
-                  value={windowAfter}
-                  onChange={(e) => setWindowAfter(Number(e.target.value))}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                />
+            {scenarioQuery.isLoading && (
+              <div className="text-sm text-gray-600">Loading scenario…</div>
+            )}
+
+            {scenarioQuery.isError && (
+              <div>
+                <ApiErrorPanel error={scenarioQuery.error} />
               </div>
+            )}
 
-              <button
-                onClick={handleAnalyze}
-                disabled={analyzeMutation.isPending || !scenarioId}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-              >
-                {analyzeMutation.isPending ? 'Analyzing…' : 'Run Analysis'}
-              </button>
-
-              {analyzeMutation.isError && (
-                <div className="mt-4">
-                  <ApiErrorPanel error={analyzeMutation.error} />
+            {scenarioQuery.isSuccess && scenarioQuery.data && (
+              <div className="space-y-4">
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">ID</div>
+                  <div className="text-sm font-medium">{scenarioQuery.data.scenarioId}</div>
                 </div>
-              )}
-            </>
-          )}
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Title</div>
+                  <div className="text-sm font-medium">{scenarioQuery.data.title}</div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Description</div>
+                  <div className="text-sm text-gray-700">{scenarioQuery.data.description}</div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Deployment</div>
+                  <div className="text-sm text-gray-700">
+                    {scenarioQuery.data.deployment.serviceId} {scenarioQuery.data.deployment.versionFrom} → {scenarioQuery.data.deployment.versionTo}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {new Date(scenarioQuery.data.deployment.timestamp).toLocaleString()}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Metrics</div>
+                  <div className="text-sm text-gray-700">
+                    {scenarioQuery.data.metrics.length} data points
+                  </div>
+                </div>
+
+                {/* Timeline Preview */}
+                <div className="mt-4 pt-4 border-t">
+                  <div className="text-xs text-gray-500 mb-2">Timeline</div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-2 py-1 bg-gray-100 rounded">Before</span>
+                    <span>→</span>
+                    <span className="px-2 py-1 bg-blue-100 rounded font-medium">Deploy</span>
+                    <span>→</span>
+                    <span className="px-2 py-1 bg-red-100 rounded">Spike</span>
+                    <span>→</span>
+                    <span className="px-2 py-1 bg-gray-100 rounded">After</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+      )}
 
-        {/* Right: Scenario Preview */}
-        <div className="rounded-xl border bg-white p-6">
-          <h2 className="text-lg font-medium mb-4">Scenario Preview</h2>
-
-          {!scenarioId && (
-            <div className="text-sm text-gray-600">
-              Select a scenario to see details.
+      {/* Google Cloud Tab */}
+      {activeTab === 'google' && (
+        <div className="space-y-6">
+          <div className="rounded-xl border bg-white p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <SourceBadge type="GOOGLE_CLOUD" />
+              <h2 className="text-lg font-medium">Google Cloud Status Incidents</h2>
             </div>
-          )}
 
-          {scenarioQuery.isLoading && (
-            <div className="text-sm text-gray-600">Loading scenario…</div>
-          )}
+            <p className="text-sm text-gray-600 mb-4">
+              Fetch real incidents from Google Cloud Status page and import them for analysis.
+            </p>
 
-          {scenarioQuery.isError && (
-            <div>
-              <ApiErrorPanel error={scenarioQuery.error} />
-            </div>
-          )}
+            <button
+              onClick={handleFetchGoogle}
+              disabled={googleIncidentsQuery.isFetching}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              {googleIncidentsQuery.isFetching ? 'Fetching…' : 'Fetch from status.cloud.google.com'}
+            </button>
 
-          {scenarioQuery.isSuccess && scenarioQuery.data && (
-            <div className="space-y-3">
-              <div>
-                <div className="text-xs text-gray-500">ID</div>
-                <div className="text-sm font-medium">{scenarioQuery.data.scenarioId}</div>
+            {googleIncidentsQuery.isError && (
+              <div className="mt-4">
+                <ApiErrorPanel error={googleIncidentsQuery.error} />
               </div>
+            )}
 
-              <div>
-                <div className="text-xs text-gray-500">Title</div>
-                <div className="text-sm font-medium">{scenarioQuery.data.title}</div>
-              </div>
-
-              <div>
-                <div className="text-xs text-gray-500">Description</div>
-                <div className="text-sm text-gray-700">{scenarioQuery.data.description}</div>
-              </div>
-
-              <div>
-                <div className="text-xs text-gray-500">Deployment</div>
-                <div className="text-sm text-gray-700">
-                  {scenarioQuery.data.deployment.serviceId} {scenarioQuery.data.deployment.versionFrom} → {scenarioQuery.data.deployment.versionTo}
+            {googleIncidentsQuery.isSuccess && googleIncidentsQuery.data && (
+              <div className="mt-4">
+                <div className="text-sm text-gray-600 mb-4">
+                  Found {googleIncidentsQuery.data.incidents?.length || 0} incidents
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {new Date(scenarioQuery.data.deployment.timestamp).toLocaleString()}
-                </div>
-              </div>
 
-              <div>
-                <div className="text-xs text-gray-500">Metrics</div>
-                <div className="text-sm text-gray-700">
-                  {scenarioQuery.data.metrics.length} data points
-                </div>
+                {googleIncidentsQuery.data.incidents && googleIncidentsQuery.data.incidents.length > 0 && (
+                  <div className="space-y-3">
+                    {googleIncidentsQuery.data.incidents.map((incident: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm mb-1">
+                              {incident.headline || incident.title || 'Google Cloud Incident'}
+                            </div>
+                            {incident.summary && (
+                              <div className="text-xs text-gray-600 line-clamp-2">{incident.summary}</div>
+                            )}
+                          </div>
+                          {incident.status && <StatusBadge status={incident.status} className="ml-4" />}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
+                          {incident.severity && <span>Severity: {incident.severity}</span>}
+                          {incident.url && (
+                            <a
+                              href={incident.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              View on status.cloud.google.com →
+                            </a>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleImportGoogle(incident)}
+                          disabled={importGoogleMutation.isPending}
+                          className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {importGoogleMutation.isPending ? 'Importing…' : 'Import & Analyze'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Info Box */}
       <div className="mt-6 rounded-xl border bg-blue-50 p-4">
         <div className="text-sm">
-          <div className="font-medium mb-1">How it works:</div>
+          <div className="font-medium mb-1">Features:</div>
           <ul className="list-disc list-inside space-y-1 text-gray-700">
-            <li>Select a scenario to investigate</li>
-            <li>Configure the time window around the deployment</li>
-            <li>Run analysis to generate ranked root-cause hypotheses</li>
-            <li>View results in the incident detail page</li>
+            <li>Unified incident model with source traceability</li>
+            <li>Idempotent imports (duplicates detected automatically)</li>
+            <li>Replay-safe storage for all incident data</li>
+            <li>Both scenarios and real Google Cloud incidents supported</li>
           </ul>
         </div>
       </div>

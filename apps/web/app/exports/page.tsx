@@ -152,8 +152,22 @@ export default function ExportsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Exports</h1>
           <p className="text-gray-600 mt-1">
-            Copy postmortem Markdown + incident JSON bundles for sharing and integration.
+            Export-ready postmortems and incident bundles. Evidence-linked narratives with confidence-aware conclusions.
           </p>
+        </div>
+      </div>
+
+      {/* Feature Highlights */}
+      <div className="mt-4 rounded-xl border bg-blue-50 p-4">
+        <div className="text-sm">
+          <div className="font-medium mb-2">Enterprise-Grade Export Features:</div>
+          <ul className="list-disc list-inside space-y-1 text-gray-700 text-xs">
+            <li>Structured JSON + Markdown formats</li>
+            <li>Evidence-linked root cause narratives</li>
+            <li>Confidence-aware conclusions</li>
+            <li>Export-ready for enterprise workflows</li>
+            <li>Full incident history included in JSON bundles</li>
+          </ul>
         </div>
       </div>
 
@@ -305,13 +319,20 @@ export default function ExportsPage() {
               {/* Incident JSON Bundle */}
               <div className="pt-4 border-t">
                 <div className="text-xs text-gray-500 mb-2 font-medium">Incident JSON Bundle</div>
-                <div className="text-xs text-gray-600 mb-2">
-                  Includes incident metadata, latest analysis, latest postmortem, and full history.
+                <div className="text-xs text-gray-600 mb-3">
+                  Complete incident package including:
+                </div>
+                <div className="text-xs text-gray-700 mb-3 space-y-1 pl-2">
+                  <div>✓ Incident metadata with source traceability</div>
+                  <div>✓ Latest analysis with Gemini 3 reasoning</div>
+                  <div>✓ Latest postmortem (evidence-linked)</div>
+                  <div>✓ Full analysis history ({incidentQuery.data.analyses.length} analyses)</div>
+                  <div>✓ All postmortem snapshots ({incidentQuery.data.postmortems.length} postmortems)</div>
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => copyIncidentJson(incidentQuery.data)}
-                    className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50"
+                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
                     Copy JSON
                   </button>

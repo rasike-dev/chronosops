@@ -678,6 +678,38 @@ export class InvestigationService {
     }
   }
 
+  async getSessionsByIncident(incidentId: string) {
+    const sessions = await this.prisma.investigationSession.findMany({
+      where: { incidentId },
+      include: {
+        iterations: {
+          orderBy: { iteration: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return sessions.map((s) => ({
+      sessionId: s.id,
+      incidentId: s.incidentId,
+      status: s.status,
+      currentIteration: s.currentIteration,
+      maxIterations: s.maxIterations,
+      confidenceTarget: s.confidenceTarget,
+      reason: s.reason,
+      createdAt: s.createdAt.toISOString(),
+      iterations: s.iterations.map((iter) => ({
+        iteration: iter.iteration,
+        createdAt: iter.createdAt.toISOString(),
+        evidenceBundleId: iter.evidenceBundleId,
+        analysisId: iter.analysisId,
+        completenessScore: iter.completenessScore,
+        overallConfidence: iter.overallConfidence,
+        decisionJson: iter.decisionJson,
+      })),
+    }));
+  }
+
   async getSessionStatus(sessionId: string) {
     const session = await this.prisma.investigationSession.findUnique({
       where: { id: sessionId },

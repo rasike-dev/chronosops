@@ -8,6 +8,24 @@ export class InvestigationController {
   constructor(private readonly investigationService: InvestigationService) {}
 
   @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
+  @Get("incident/:incidentId")
+  async getSessionsByIncident(@Param('incidentId') incidentId: string) {
+    try {
+      const sessions = await this.investigationService.getSessionsByIncident(incidentId);
+      return sessions;
+    } catch (error: any) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.error('[InvestigationController.getSessionsByIncident] Error:', error?.message || error);
+      throw new HttpException(
+        `Failed to get investigation sessions: ${error?.message || 'Unknown error'}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
   @Get(":sessionId")
   async getSessionStatus(@Param('sessionId') sessionId: string) {
     try {
