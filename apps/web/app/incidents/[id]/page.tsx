@@ -477,7 +477,7 @@ export default function IncidentDetailPage() {
                     if (incidentQuery.data.analyses.length >= 2) {
                       const a = incidentQuery.data.analyses[0].id
                       const b = incidentQuery.data.analyses[1].id
-                      window.open(`/v1/incidents/${id}/analyses/${a}/compare/${b}`, '_blank')
+                      router.push(`/incidents/${id}/compare/${a}/${b}`)
                     }
                   }}
                 >

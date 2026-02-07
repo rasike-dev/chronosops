@@ -5,7 +5,7 @@ ChronosOps investigates production incidents by reasoning over deployments and t
 ## What's in this MVP
 - Monorepo (pnpm workspace)
   - `apps/api` — NestJS API with authentication, persistence, and incident analysis
-  - `apps/web` — Next.js Web Console with demo UI
+  - `apps/web` — Next.js Web Console with **enterprise-grade UI** showcasing all features
   - `packages/contracts` — shared TypeScript + Zod schemas (single source of truth)
 - **Scenarios**
   - `latency-spike` (post-deploy latency regression)
@@ -90,7 +90,10 @@ pnpm -r dev
 
 ## URLs
 - **Web Console**: http://localhost:3000
-- **Demo Page**: http://localhost:3000/demo
+- **Create Incident**: http://localhost:3000/analyze (Scenarios & Google Cloud import)
+- **Incident List**: http://localhost:3000/incidents
+- **Incident Workspace**: http://localhost:3000/incidents/:id (Full feature showcase)
+- **Export Center**: http://localhost:3000/exports
 - **API**: http://localhost:4000 (or your configured port)
 - **API health**: http://localhost:4000/v1/health (public)
 - **API readiness**: http://localhost:4000/v1/ready (public)
@@ -120,6 +123,7 @@ pnpm -r dev
 
 #### Investigation (Analyst/Admin only)
 - `POST /v1/incidents/:id/investigate` — Start autonomous investigation session
+- `GET /v1/investigations/incident/:incidentId` — Get all investigation sessions for an incident
 - `GET /v1/investigations/:sessionId` — Get investigation session status
 
 #### Evidence & Traces
@@ -190,6 +194,20 @@ All records are insert-only (never overwritten) to maintain a full audit trail.
 - **Health Checks**: Database connectivity, migration status
 - **Version Info**: Git SHA, build time, prompt version, generator version
 
+### Enterprise-Grade UI
+- **Unified Incident Creation**: Source tabs for Scenarios and Google Cloud incidents
+- **Visual Timeline Preview**: Interactive timeline showing deployment → spike → peak
+- **Source Traceability**: Clear badges and metadata showing incident origin
+- **Evidence Bundle Viewer**: Completeness scores, evidence type grid, hash display
+- **Analysis Dashboard**: Gemini 3 reasoning results with hypothesis ranking and confidence scores
+- **Investigation Loop Timeline**: Real-time iteration tracking with model requests and stop conditions
+- **Explainability Graph**: Visual trace from evidence → reasoning → conclusion (ready for interactive visualization)
+- **Analysis Comparison**: Side-by-side drift detection between multiple runs
+- **Export Center**: Enhanced postmortem and JSON bundle exports with feature highlights
+- **Audit Chain Verification**: One-click integrity verification with tamper detection status
+- **Filtering & Search**: Source and status filters on incident list
+- **Responsive Design**: Enterprise-grade UI with consistent styling and clear visual hierarchy
+
 ## Repo Structure
 - `apps/api` — NestJS API with modules:
   - `auth/` — JWT/OIDC authentication (strategy, guard, decorators)
@@ -199,7 +217,10 @@ All records are insert-only (never overwritten) to maintain a full audit trail.
   - `modules/scenario/` — Scenario service
   - `modules/incidents/` — Incident analysis and persistence
   - `prisma/` — Prisma service and module
-- `apps/web` — Next.js console with demo UI
+- `apps/web` — Next.js console with enterprise-grade UI
+  - Reusable UI components (SourceBadge, EvidenceGrid, HypothesisCard, etc.)
+  - Enhanced pages: `/analyze`, `/incidents`, `/incidents/[id]`, `/exports`
+  - Feature-rich incident workspace showcasing all capabilities
 - `packages/contracts` — Zod schemas + shared types
 - `infra/` — Docker Compose for local development
 
@@ -312,9 +333,36 @@ See `docs/ship-checklist.md` for a comprehensive checklist of all features.
 - CI pipeline with smoke tests
 - Comprehensive documentation
 
-**Web UI:**
-- Demo page with copy-to-clipboard functionality
-- Incident workspace
-- Analysis comparison view
+**Enterprise-Grade UI (Production Workflow Showcase):**
+- **Incident Creation Page** (`/analyze`):
+  - Source tabs (Scenarios / Google Cloud)
+  - Timeline preview with deployment markers
+  - Google Cloud incident fetcher and importer
+  - Source badges and traceability indicators
+  - Idempotency detection
+  
+- **Incident Workspace** (`/incidents/[id]`):
+  - Evidence Bundle section with completeness scoring and type grid
+  - Analysis Results section with Gemini 3 reasoning and hypothesis ranking
+  - Investigation Loop section with iteration timeline and model requests
+  - Explainability Graph section (ready for interactive visualization)
+  - Analysis Comparison section with drift detection
+  - Postmortem section with Markdown/JSON export
+  - Audit Chain section with integrity verification
+  
+- **Incident List** (`/incidents`):
+  - Source badges on each incident
+  - Filters by source type and status
+  - Quick stats and metadata display
+  
+- **Export Center** (`/exports`):
+  - Feature highlights and bundle information
+  - Enhanced export options with detailed breakdowns
+  - Copy and download functionality for postmortems and JSON bundles
+  
+- **Reusable Components**:
+  - SourceBadge, StatusBadge, EvidenceCompleteness, EvidenceTypeGrid
+  - FeatureSection, HypothesisCard, and more
+  - Consistent enterprise-grade styling throughout
 
 📋 **See `docs/ship-checklist.md` for complete feature verification checklist.**
