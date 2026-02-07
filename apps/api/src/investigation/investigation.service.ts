@@ -17,6 +17,7 @@ import { applyEvidenceRequestPolicy } from "./evidence-request.policy";
 import { mapRequestsToCollectors, buildCollectContext } from "./evidence-request.mapper";
 import { assertCanInvestigate } from "../auth/rbac.assert";
 import { checkCollectorPolicy } from "../policy/collector.policy";
+import { AuditService } from "../audit/audit.service";
 import type { CurrentUser } from "../auth/auth.types";
 
 const logger = new Logger("InvestigationService");
@@ -49,6 +50,7 @@ export class InvestigationService {
     private readonly logsCollector: LogsCollector,
     private readonly tracesCollector: TracesCollector,
     private readonly reasoningAdapter: GeminiReasoningAdapter,
+    private readonly audit: AuditService,
   ) {}
 
   async startInvestigation(params: StartInvestigationParams): Promise<{ sessionId: string; status: string }> {
@@ -591,6 +593,26 @@ export class InvestigationService {
             notes: useModelRequests
               ? `Model-directed: ${approvedRequests.length} approved, ${rejectedRequests.length} rejected`
               : fallbackPlan.reason,
+          },
+        });
+
+        // Day 20: Emit audit event for investigation iteration
+        await this.audit.appendEvent({
+          eventType: "INVESTIGATION_ITERATION_RECORDED",
+          entityType: "INVESTIGATION_SESSION",
+          entityId: sessionId,
+          entityRef: null,
+          payload: {
+            sessionId,
+            iteration,
+            analysisId: newAnalysis.id,
+            bundleId: savedBundle.bundleId,
+            decisionSummary: {
+              useModelRequests,
+              approvedCount: approvedRequests.length,
+              rejectedCount: rejectedRequests.length,
+              executedCollectors: executedCollectors,
+            },
           },
         });
 

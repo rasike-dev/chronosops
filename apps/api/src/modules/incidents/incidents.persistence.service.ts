@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../../audit/audit.service';
 
 @Injectable()
 export class IncidentsPersistenceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async createIncident(params: {
     scenarioId: string;
@@ -36,7 +40,7 @@ export class IncidentsPersistenceService {
     evidenceCompleteness?: unknown | null;
     reasoningJson?: unknown | null;
   }) {
-    return this.prisma.incidentAnalysis.create({
+    const result = await this.prisma.incidentAnalysis.create({
       data: {
         incidentId: params.incidentId,
         requestJson: params.requestJson as any,
@@ -46,6 +50,26 @@ export class IncidentsPersistenceService {
         reasoningJson: params.reasoningJson ? (params.reasoningJson as any) : null,
       },
     });
+
+    // Day 20: Emit audit event for analysis creation
+    const completeness = params.evidenceCompleteness as any;
+    const reasoning = params.reasoningJson as any;
+    
+    await this.audit.appendEvent({
+      eventType: "ANALYSIS_CREATED",
+      entityType: "INCIDENT_ANALYSIS",
+      entityId: result.id,
+      entityRef: null,
+      payload: {
+        analysisId: result.id,
+        incidentId: params.incidentId,
+        evidenceBundleId: params.evidenceBundleId,
+        completenessScore: completeness?.score ?? null,
+        overallConfidence: reasoning?.overallConfidence ?? null,
+      },
+    });
+
+    return result;
   }
 
   /**
@@ -60,7 +84,7 @@ export class IncidentsPersistenceService {
     hashAlgo: string;
     hashInputVersion: string;
   }) {
-    return this.prisma.evidenceBundle.upsert({
+    const result = await this.prisma.evidenceBundle.upsert({
       where: { bundleId: params.bundleId },
       create: {
         bundleId: params.bundleId,
@@ -73,6 +97,31 @@ export class IncidentsPersistenceService {
       },
       update: {}, // Immutable by content - if hash matches, bundle is identical
     });
+
+    // Day 20: Emit audit event for bundle creation (only if newly created)
+    const wasCreated = result.createdAt.getTime() === new Date().getTime() || 
+                       Math.abs(result.createdAt.getTime() - Date.now()) < 5000; // Within 5 seconds
+    if (wasCreated) {
+      const artifacts = (params.payload as any)?.artifacts || [];
+      const artifactIds = artifacts.map((a: any) => a.artifactId || a.kind).filter(Boolean);
+      
+      await this.audit.appendEvent({
+        eventType: "EVIDENCE_BUNDLE_CREATED",
+        entityType: "EVIDENCE_BUNDLE",
+        entityId: result.id,
+        entityRef: params.bundleId,
+        payload: {
+          bundleId: params.bundleId,
+          incidentId: params.incidentId,
+          sources: params.sources,
+          artifactIds: artifactIds.slice(0, 50), // Bounded
+          hashAlgo: params.hashAlgo,
+          hashInputVersion: params.hashInputVersion,
+        },
+      });
+    }
+
+    return result;
   }
 
   /**
@@ -85,7 +134,7 @@ export class IncidentsPersistenceService {
     json: unknown;
     generatorVersion?: string | null;
   }) {
-    return this.prisma.postmortem.create({
+    const result = await this.prisma.postmortem.create({
       data: {
         incidentId: params.incidentId,
         markdown: params.markdown,
@@ -93,5 +142,27 @@ export class IncidentsPersistenceService {
         generatorVersion: params.generatorVersion ?? null,
       },
     });
+
+    // Day 20: Emit audit event for postmortem creation
+    const json = params.json as any;
+    const analysisId = json?.analysisId || null;
+    const summary = json?.summary || {};
+    const evidence = json?.evidence || {};
+    
+    await this.audit.appendEvent({
+      eventType: "POSTMORTEM_CREATED",
+      entityType: "POSTMORTEM",
+      entityId: result.id,
+      entityRef: null,
+      payload: {
+        postmortemId: result.id,
+        analysisId,
+        generatorVersion: params.generatorVersion,
+        summaryHeadline: summary.headline || null,
+        bundleId: evidence.bundleId || null,
+      },
+    });
+
+    return result;
   }
 }

@@ -159,3 +159,28 @@ model InvestigationIteration {
   @@unique([sessionId, iteration])
   @@index([sessionId])
 }
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+
+  // chain integrity
+  chainId     String   // e.g. "chronosops"
+  seq         Int
+  prevHash    String
+  hash        String
+
+  // what happened
+  eventType   String   // e.g. EVIDENCE_BUNDLE_CREATED, REASONING_TRACE_CREATED, ANALYSIS_CREATED, INVESTIGATION_ITERATION
+  entityType  String   // EVIDENCE_BUNDLE | PROMPT_TRACE | INCIDENT_ANALYSIS | INVESTIGATION_SESSION | POSTMORTEM
+  entityId    String   // DB id or stable id
+  entityRef   String?  // optional: bundleId, promptHash, etc.
+
+  // canonical payload (bounded)
+  payload     Json
+
+  @@unique([chainId, seq])
+  @@index([chainId])
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}

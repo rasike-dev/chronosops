@@ -7,11 +7,13 @@ import { CollectorsModule } from "../../collectors/collectors.module";
 import { ReasoningModule } from "../../reasoning/reasoning.module";
 import { AnalysisCompareService } from "./analysis/analysis-compare.service";
 import { InvestigationModule } from "../../investigation/investigation.module";
+import { AuditModule } from "../../audit/audit.module";
+import { AuditVerifyService } from "./analysis/audit-verify.service";
 
 @Module({
-  imports: [ScenarioModule, GoogleIntegrationModule, CollectorsModule, ReasoningModule, InvestigationModule],
+  imports: [ScenarioModule, GoogleIntegrationModule, CollectorsModule, ReasoningModule, InvestigationModule, AuditModule],
   controllers: [IncidentsController],
-  providers: [IncidentsPersistenceService, AnalysisCompareService],
+  providers: [IncidentsPersistenceService, AnalysisCompareService, AuditVerifyService],
   exports: [IncidentsPersistenceService],
 })
 export class IncidentsModule {}

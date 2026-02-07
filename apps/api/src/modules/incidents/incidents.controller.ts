@@ -27,6 +27,8 @@ import { StartInvestigationRequestSchema, StartInvestigationResponseSchema, Inve
 import { assertCanViewSensitiveData } from "../../auth/rbac.assert";
 import { redactEvidenceBundle } from "../../policy/redaction";
 import { buildExplainabilityGraph } from "./analysis/explainability-graph.builder";
+import { AuditService } from "../../audit/audit.service";
+import { AuditVerifyService } from "./analysis/audit-verify.service";
 
 @Controller("v1/incidents")
 export class IncidentsController {
@@ -43,6 +45,8 @@ export class IncidentsController {
     private readonly reasoningAdapter: GeminiReasoningAdapter,
     private readonly analysisCompareService: AnalysisCompareService,
     private readonly investigationService: InvestigationService,
+    private readonly audit: AuditService,
+    private readonly auditVerify: AuditVerifyService,
   ) {}
 
   @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
@@ -832,7 +836,7 @@ export class IncidentsController {
       // 11) Persist prompt trace (if reasoning succeeded)
       if (reasoningResult && reasoningResponse) {
         const traceData = (reasoningResult as any).traceData;
-        await this.prisma.promptTrace.create({
+        const promptTrace = await this.prisma.promptTrace.create({
           data: {
             incidentId: incident.id,
             analysisId: savedAnalysis.id,
@@ -846,6 +850,23 @@ export class IncidentsController {
             userPrompt: traceData.userPrompt,
             requestJson: reasoningRequest as any,
             responseJson: reasoningResponse as any,
+          },
+        });
+
+        // Day 20: Emit audit event for prompt trace
+        await this.audit.appendEvent({
+          eventType: "PROMPT_TRACE_CREATED",
+          entityType: "PROMPT_TRACE",
+          entityId: promptTrace.id,
+          entityRef: traceData.promptHash,
+          payload: {
+            promptTraceId: promptTrace.id,
+            analysisId: savedAnalysis.id,
+            promptHash: traceData.promptHash,
+            requestHash: traceData.requestHash,
+            responseHash: traceData.responseHash,
+            model: reasoningResponse.model,
+            promptVersion: reasoningResponse.promptVersion,
           },
         });
       }
@@ -1146,7 +1167,7 @@ export class IncidentsController {
         // Persist prompt trace (if reasoning succeeded)
         if (reasoningResult && reasoningResponse) {
           const traceData = (reasoningResult as any).traceData;
-          await this.prisma.promptTrace.create({
+          const promptTrace = await this.prisma.promptTrace.create({
             data: {
               incidentId: incidentData.id,
               analysisId: newAnalysis.id,
@@ -1160,6 +1181,23 @@ export class IncidentsController {
               userPrompt: traceData.userPrompt,
               requestJson: reasoningRequest as any,
               responseJson: reasoningResponse as any,
+            },
+          });
+
+          // Day 20: Emit audit event for prompt trace
+          await this.audit.appendEvent({
+            eventType: "PROMPT_TRACE_CREATED",
+            entityType: "PROMPT_TRACE",
+            entityId: promptTrace.id,
+            entityRef: traceData.promptHash,
+            payload: {
+              promptTraceId: promptTrace.id,
+              analysisId: newAnalysis.id,
+              promptHash: traceData.promptHash,
+              requestHash: traceData.requestHash,
+              responseHash: traceData.responseHash,
+              model: reasoningResponse.model,
+              promptVersion: reasoningResponse.promptVersion,
             },
           });
         }
@@ -1707,6 +1745,40 @@ export class IncidentsController {
       console.error('[IncidentsController.compareAnalyses] Error:', error?.message || error);
       throw new HttpException(
         `Failed to compare analyses: ${error?.message || 'Unknown error'}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
+  @Get(':id/verify')
+  async verifyIntegrity(@Param('id') incidentId: string) {
+    try {
+      // Verify incident exists
+      const incident = await this.prisma.incident.findUnique({
+        where: { id: incidentId },
+        select: { id: true },
+      });
+
+      if (!incident) {
+        throw new HttpException(`Incident not found: ${incidentId}`, HttpStatus.NOT_FOUND);
+      }
+
+      // Verify audit chain
+      const result = await this.auditVerify.verifyIncidentChain(incidentId);
+
+      return {
+        incidentId,
+        ...result,
+        status: result.ok ? "VERIFIED" : "FAILED",
+      };
+    } catch (error: any) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.error('[IncidentsController.verifyIntegrity] Error:', error?.message || error);
+      throw new HttpException(
+        `Failed to verify integrity: ${error?.message || 'Unknown error'}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
