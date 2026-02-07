@@ -39,13 +39,28 @@ export class GoogleIncidentsClient {
     const fetchedAt = new Date().toISOString();
 
     try {
-      const res = await fetch(GOOGLE_CLOUD_STATUS.incidentsJsonUrl, {
-        method: "GET",
-        headers: {
-          "accept": "application/json",
-          "user-agent": "ChronosOps/1.0 (+https://github.com/chronosops)", // safe UA
-        },
-      });
+      // Day 21: Add timeout for external fetch (5 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      let res;
+      try {
+        res = await fetch(GOOGLE_CLOUD_STATUS.incidentsJsonUrl, {
+          method: "GET",
+          headers: {
+            "accept": "application/json",
+            "user-agent": "ChronosOps/1.0 (+https://github.com/chronosops)", // safe UA
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError' || controller.signal.aborted) {
+          throw new Error("Google incidents fetch timed out after 5s");
+        }
+        throw error;
+      }
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");

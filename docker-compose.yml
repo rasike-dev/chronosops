@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chronosops-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chronosops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chronosops}
+      POSTGRES_DB: ${POSTGRES_DB:-chronosops}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chronosops}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chronosops-network
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: chronosops-api
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-chronosops}:${POSTGRES_PASSWORD:-chronosops}@postgres:5432/${POSTGRES_DB:-chronosops}
+      PORT: 4000
+      NODE_ENV: ${NODE_ENV:-development}
+      CHRONOSOPS_SAFE_MODE: ${CHRONOSOPS_SAFE_MODE:-true}
+      CHRONOSOPS_AUDIT_CHAIN_ID: ${CHRONOSOPS_AUDIT_CHAIN_ID:-chronosops}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash-exp}
+      # Auth (Keycloak)
+      CHRONOSOPS_AUTH_REQUIRED: ${CHRONOSOPS_AUTH_REQUIRED:-false}
+      CHRONOSOPS_AUTH_ISSUER_URL: ${CHRONOSOPS_AUTH_ISSUER_URL:-}
+      CHRONOSOPS_AUTH_AUDIENCE: ${CHRONOSOPS_AUTH_AUDIENCE:-}
+      CHRONOSOPS_AUTH_JWKS_URI: ${CHRONOSOPS_AUTH_JWKS_URI:-}
+      # Collector allowlists (safe mode)
+      CHRONOSOPS_ALLOW_REAL_GCP_METRICS: ${CHRONOSOPS_ALLOW_REAL_GCP_METRICS:-false}
+      CHRONOSOPS_ALLOW_REAL_GCP_LOGS: ${CHRONOSOPS_ALLOW_REAL_GCP_LOGS:-false}
+      CHRONOSOPS_ALLOW_REAL_GCP_TRACES: ${CHRONOSOPS_ALLOW_REAL_GCP_TRACES:-false}
+    ports:
+      - "${API_PORT:-4000}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    command: ["./scripts/start-dev.sh"]
+    networks:
+      - chronosops-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: chronosops-web
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:4000}
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/web/node_modules
+    networks:
+      - chronosops-network
+
+volumes:
+  postgres_data:
+
+networks:
+  chronosops-network:
+    driver: bridge

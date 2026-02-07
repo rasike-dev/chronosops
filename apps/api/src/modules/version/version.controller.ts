@@ -1,15 +1,14 @@
 import { Controller, Get } from "@nestjs/common";
 import { Public } from "../../auth/public.decorator";
+import { VersionService } from "./version.service";
 
 @Controller("v1/version")
 export class VersionController {
+  constructor(private readonly versionService: VersionService) {}
+
   @Public()
   @Get()
   getVersion() {
-    return {
-      service: "chronosops-api",
-      version: "0.0.1",
-      time: new Date().toISOString(),
-    };
+    return this.versionService.getVersion();
   }
 }

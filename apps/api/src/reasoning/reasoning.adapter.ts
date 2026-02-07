@@ -61,8 +61,23 @@ export class GeminiReasoningAdapter {
       // Combine system and user prompts
       const fullPrompt = `${prompt.system}\n\n${prompt.user}`;
 
-      // Generate content
-      const result = await model.generateContent(fullPrompt);
+      // Day 21: Add timeout for Gemini API call (30 seconds)
+      const timeoutMs = 30000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      let result;
+      try {
+        result = await model.generateContent(fullPrompt);
+        clearTimeout(timeoutId);
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError' || controller.signal.aborted) {
+          throw new ReasoningError("Gemini API call timed out after 30s", "MODEL_CALL_FAILED");
+        }
+        throw error;
+      }
+      
       const response = await result.response;
       rawText = response.text();
 

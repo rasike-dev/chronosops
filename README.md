@@ -36,34 +36,49 @@ ChronosOps investigates production incidents by reasoning over deployments and t
 
 ## Quick Start
 
-### 1) Install dependencies:
-```bash
-pnpm install
-```
+### Option 1: Docker Compose (Recommended)
 
-### 2) Configure environment:
+One-command bring-up:
+
 ```bash
+# 1. Copy environment template
 cp .env.example .env
+
+# 2. Edit .env if needed (defaults work for local dev)
+
+# 3. Start all services
+docker compose up -d --build
+
+# Services will be available at:
+# - API: http://localhost:4000
+# - Web: http://localhost:3000
+# - PostgreSQL: localhost:5432
 ```
 
-Edit `.env` and set:
-- `DATABASE_URL` (e.g., `postgresql://chronosops:chronosops@localhost:5432/chronosops`)
-- `AUTH_REQUIRED` (set to `false` for development, `true` for production)
-- `OIDC_ISSUER_URL`, `OIDC_AUDIENCE`, `OIDC_JWKS_URI` (if using authentication)
+The Docker Compose setup includes:
+- PostgreSQL database (with automatic migrations)
+- API server (with health checks)
+- Web console
 
-### 3) Start PostgreSQL (if using Docker Compose):
+### Option 2: Local Development
+
 ```bash
+# 1. Install dependencies
+pnpm install
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env and set DATABASE_URL
+
+# 3. Start PostgreSQL (if using Docker Compose)
 docker-compose -f infra/docker-compose.dev.yml up -d
-```
 
-### 4) Run database migrations:
-```bash
+# 4. Run database migrations
 cd apps/api
-npx prisma migrate dev
-```
+pnpm prisma migrate dev
 
-### 5) Run API + Web:
-```bash
+# 5. Run API + Web
+cd ../..
 pnpm -r dev
 ```
 
