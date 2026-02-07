@@ -87,21 +87,44 @@ pnpm -r dev
 - **Demo Page**: http://localhost:3000/demo
 - **API**: http://localhost:4000 (or your configured port)
 - **API health**: http://localhost:4000/v1/health (public)
+- **API readiness**: http://localhost:4000/v1/ready (public)
 - **API version**: http://localhost:4000/v1/version (public)
 
 ## Core API Surface
 
 ### Public Endpoints (No Authentication Required)
-- `GET /v1/health` — Health check
-- `GET /v1/version` — API version info
+- `GET /v1/health` — Health check (includes database connectivity)
+- `GET /v1/ready` — Readiness check (database + migrations)
+- `GET /v1/version` — API version info (includes git SHA, build time, prompt version)
 
 ### Protected Endpoints (JWT Required)
+
+#### Scenarios
 - `GET /v1/scenarios` — List available scenarios
 - `GET /v1/scenarios/:id` — Get scenario details
+
+#### Incidents
 - `POST /v1/incidents/analyze` — Analyze a new incident
 - `GET /v1/incidents` — List incidents
 - `GET /v1/incidents/:id` — Get incident details with analyses and postmortems
 - `POST /v1/incidents/:id/reanalyze` — Re-run analysis for an existing incident
+- `GET /v1/incidents/:id/analyses/:a/compare/:b` — Compare two analyses (drift detection)
+- `GET /v1/incidents/:incidentId/analyses/:analysisId/explainability-graph` — Get explainability graph
+- `GET /v1/incidents/:id/verify` — Verify audit chain integrity
+
+#### Investigation (Analyst/Admin only)
+- `POST /v1/incidents/:id/investigate` — Start autonomous investigation session
+- `GET /v1/investigations/:sessionId` — Get investigation session status
+
+#### Evidence & Traces
+- `GET /v1/incidents/:id/prompt-traces` — List prompt traces for an incident
+- `GET /v1/incidents/prompt-traces/:id` — Get specific prompt trace
+- `GET /v1/incidents/evidence-bundles/:bundleId` — Get evidence bundle
+
+#### Postmortems
+- `GET /v1/incidents/:id/postmortems` — List postmortems for an incident
+- `GET /v1/incidents/postmortems/:id` — Get postmortem details
+- `GET /v1/incidents/postmortems/:id/markdown` — Get postmortem markdown
 
 ## Authentication
 
@@ -109,10 +132,12 @@ The API uses JWT/OIDC authentication with JWKS validation. By default, all route
 
 ### Configuration
 Set these environment variables:
-- `AUTH_REQUIRED=true` (or `false` to disable auth)
-- `OIDC_ISSUER_URL` — OIDC issuer URL (e.g., Keycloak realm)
-- `OIDC_AUDIENCE` — Expected audience claim
-- `OIDC_JWKS_URI` — JWKS endpoint for public key validation
+- `CHRONOSOPS_AUTH_REQUIRED=true` (or `false` to disable auth)
+- `CHRONOSOPS_AUTH_ISSUER_URL` — OIDC issuer URL (e.g., Keycloak realm)
+- `CHRONOSOPS_AUTH_AUDIENCE` — Expected audience claim
+- `CHRONOSOPS_AUTH_JWKS_URI` — JWKS endpoint for public key validation
+
+**Note**: Legacy `AUTH_REQUIRED`, `OIDC_ISSUER_URL`, etc. are also supported for backward compatibility.
 
 ### Using the API
 Include the JWT token in the `Authorization` header:
@@ -122,18 +147,42 @@ curl -H "Authorization: Bearer <your-jwt-token>" http://localhost:4000/v1/incide
 
 ## Database Schema
 
-- **Incident**: Stores incident metadata (scenarioId, title, status)
+- **Incident**: Stores incident metadata (scenarioId, title, status, sourceType, sourcePayload)
 - **IncidentAnalysis**: Stores analysis request and result JSON (enables replayability)
+- **EvidenceBundle**: Content-addressed evidence bundles (immutable, hash-based)
+- **PromptTrace**: Full prompt/request/response traces with hashes for integrity
 - **Postmortem**: Stores postmortem markdown and JSON snapshots
+- **InvestigationSession**: Autonomous investigation session metadata
+- **InvestigationIteration**: Per-iteration records with decision JSON
+- **AuditEvent**: Tamper-evident audit chain (hash-linked events)
 
 All records are insert-only (never overwritten) to maintain a full audit trail.
 
-## MVP Behavior Notes
-- **Evidence-first**: Analysis is deterministic and derived from scenario telemetry
-- **Read-only by default**: No auto-remediation actions
-- **Strict validation**: Contracts are shared via `packages/contracts`
-- **Audit trail**: All analyses and postmortems are persisted with timestamps
-- **Replayable**: Re-analyze incidents using stored request data
+## Key Features
+
+### Safety & Policy
+- **Safe Mode**: Default ON - collectors run in STUB mode unless explicitly allowlisted
+- **Policy Gating**: Evidence requests validated with bounds (time windows, max items, allowlists)
+- **RBAC Enforcement**: Role-based access control (Viewer, Analyst, Admin)
+- **Data Redaction**: Sensitive data (sourcePayload, prompt traces) redacted for non-admins
+- **Request Limits**: Body size limits (2MB), rate limiting configured
+
+### Autonomous Investigation
+- **Investigation Loop**: Bounded iterations with stop conditions (confidence target, max iterations, no progress)
+- **Model-Directed**: Gemini can request specific evidence types (Day 17)
+- **Deterministic Fallback**: Falls back to completeness-based plan if model requests unavailable
+- **Full Audit**: Every iteration recorded with decision JSON
+
+### Explainability & Traceability
+- **Explainability Graph**: Visual trace from evidence → reasoning → conclusion
+- **Analysis Comparison**: Compare two analyses to detect drift
+- **Audit Chain**: Hash-linked audit log for tamper detection
+- **Integrity Verification**: Verify audit chain continuity and detect tampering
+
+### Observability
+- **Structured Logging**: Request IDs, correlation IDs, incident context
+- **Health Checks**: Database connectivity, migration status
+- **Version Info**: Git SHA, build time, prompt version, generator version
 
 ## Repo Structure
 - `apps/api` — NestJS API with modules:
@@ -171,32 +220,95 @@ All records are insert-only (never overwritten) to maintain a full audit trail.
 - Check network connectivity to database host
 
 ## Verification
+
+### Quick Verification (Docker Compose)
+```bash
+# 1. Clone the repo
+git clone <repo-url>
+cd chronosops
+
+# 2. Copy environment template
+cp .env.example .env
+
+# 3. Start all services
+docker compose up -d --build
+
+# 4. Verify endpoints
+curl http://localhost:4000/v1/health    # Should return {"ok":true,"database":"connected"}
+curl http://localhost:4000/v1/ready    # Should return {"ready":true,"migrations":"applied"}
+curl http://localhost:4000/v1/version  # Should return version info with git SHA
+
+# 5. Access web UI
+open http://localhost:3000
+```
+
+### Manual Verification
 A new contributor can:
 1. Clone the repo
 2. Run `pnpm install`
 3. Copy `.env.example` to `.env` and configure `DATABASE_URL`
 4. Start PostgreSQL (via Docker Compose or local instance)
-5. Run `cd apps/api && npx prisma migrate dev`
+5. Run `cd apps/api && pnpm prisma migrate dev`
 6. Run `pnpm -r dev`
 7. See the web UI at http://localhost:3000/demo and verify `/v1/version` returns 200
 
+### Complete Feature Verification
+See `docs/ship-checklist.md` for a comprehensive checklist of all features.
+
 ## Current Status
 
-✅ **Completed Features:**
+✅ **Completed Features (Days 1-21):**
+
+**Core Functionality:**
 - Incident analysis with evidence table and explainability
 - Scenario-aware runbook generation
 - Postmortem export (Markdown + JSON)
 - Database persistence with Prisma
 - Replayable analysis (re-analyze incidents)
+- Analysis comparison (drift detection)
+
+**Authentication & Authorization:**
 - JWT/OIDC authentication with JWKS validation
 - Global auth guard with public endpoint allowlist
-- Web UI with demo script and copy-to-clipboard functionality
+- Role-based access control (RBAC) - Viewer, Analyst, Admin
+- Service-layer RBAC enforcement
 
-🚧 **In Progress:**
-- Additional scenario types
-- Enhanced runbook actions
+**Autonomous Investigation (Days 16-17):**
+- Investigation loop orchestration with bounded iterations
+- Model-directed evidence requests (Gemini tool protocol)
+- Deterministic fallback planning
+- Stop conditions (confidence target, max iterations, no progress)
+- Full iteration audit trail
 
-📋 **Planned:**
-- Role-based access control (RBAC)
-- Incident timeline visualization
-- Integration with external monitoring systems
+**Safety & Policy (Day 18):**
+- Safe mode (default ON)
+- Collector policy gating (STUB mode enforcement)
+- Evidence request policy (bounds, allowlists, per-iteration limits)
+- Data redaction (sourcePayload, prompt traces, evidence bundles)
+- Request size limits and rate limiting
+
+**Explainability (Day 19):**
+- Explainability graph (evidence → reasoning → conclusion)
+- Interactive graph visualization
+- Traceability via evidenceRefs
+
+**Audit & Integrity (Day 20):**
+- Hash-chained audit log
+- Tamper-evident event chain
+- Integrity verification endpoint
+- Full audit trail for all critical operations
+
+**Production Readiness (Day 21):**
+- Docker Compose one-command setup
+- Health, readiness, and version endpoints
+- Structured logging with correlation IDs
+- Timeouts for external API calls
+- CI pipeline with smoke tests
+- Comprehensive documentation
+
+**Web UI:**
+- Demo page with copy-to-clipboard functionality
+- Incident workspace
+- Analysis comparison view
+
+📋 **See `docs/ship-checklist.md` for complete feature verification checklist.**
