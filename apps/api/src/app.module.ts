@@ -9,9 +9,10 @@ import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/jwt-auth.guard";
 import { RolesGuard } from "./auth/roles.guard";
 import { GoogleIntegrationModule } from "./integrations/google/google.module";
+import { InvestigationModule } from "./investigation/investigation.module";
 
 @Module({
-  imports: [PrismaModule, HealthModule, ScenarioModule, IncidentsModule, VersionModule, AuthModule, GoogleIntegrationModule],
+  imports: [PrismaModule, HealthModule, ScenarioModule, IncidentsModule, VersionModule, AuthModule, GoogleIntegrationModule, InvestigationModule],
   providers: [
     {
       provide: APP_GUARD,

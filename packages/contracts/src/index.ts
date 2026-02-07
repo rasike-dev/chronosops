@@ -154,3 +154,6 @@ export * from "./postmortem/postmortem-v2.schema";
 
 /** Analysis Compare */
 export * from "./analysis/analysis-compare.schema";
+
+/** Investigation */
+export * from "./investigation/investigation.schema";

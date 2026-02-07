@@ -22,6 +22,8 @@ import { selectHypothesisCandidates } from "../../reasoning/hypotheses/preselect
 import { generatePostmortemV2, POSTMORTEM_GENERATOR_VERSION } from "../../postmortem/postmortem.generator";
 import { renderPostmortemMarkdown } from "../../postmortem/postmortem.render-md";
 import { AnalysisCompareService } from "./analysis/analysis-compare.service";
+import { InvestigationService } from "../../investigation/investigation.service";
+import { StartInvestigationRequestSchema, StartInvestigationResponseSchema, InvestigationStatusSchema } from "@chronosops/contracts";
 
 @Controller("v1/incidents")
 export class IncidentsController {
@@ -37,6 +39,7 @@ export class IncidentsController {
     private readonly tracesCollector: TracesCollector,
     private readonly reasoningAdapter: GeminiReasoningAdapter,
     private readonly analysisCompareService: AnalysisCompareService,
+    private readonly investigationService: InvestigationService,
   ) {}
 
   @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
@@ -1815,6 +1818,42 @@ export class IncidentsController {
       console.error('[IncidentsController.getPostmortemJson] Error:', error?.message || error);
       throw new HttpException(
         `Failed to get postmortem JSON: ${error?.message || 'Unknown error'}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Roles('CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')
+  @Post(":id/investigate")
+  async startInvestigation(
+    @Param('id') incidentId: string,
+    @Body() body: unknown,
+    @Req() httpReq: { user?: CurrentUser }
+  ) {
+    try {
+      const parsed = StartInvestigationRequestSchema.safeParse(body ?? {});
+      if (!parsed.success) {
+        throw new BadRequestException({
+          message: 'Invalid request body',
+          errors: parsed.error.flatten(),
+        });
+      }
+
+      const result = await this.investigationService.startInvestigation({
+        incidentId,
+        maxIterations: parsed.data.maxIterations,
+        confidenceTarget: parsed.data.confidenceTarget,
+        user: httpReq.user,
+      });
+
+      return StartInvestigationResponseSchema.parse(result);
+    } catch (error: any) {
+      if (error instanceof BadRequestException || error instanceof HttpException) {
+        throw error;
+      }
+      console.error('[IncidentsController.startInvestigation] Error:', error?.message || error);
+      throw new HttpException(
+        `Failed to start investigation: ${error?.message || 'Unknown error'}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
