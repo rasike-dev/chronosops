@@ -46,10 +46,16 @@ export function FeatureLauncher() {
 
       {!authed && !q.isLoading && (
         <div className="mt-4 p-3 rounded-lg border bg-amber-50">
-          <div className="font-medium">Login required</div>
-          <div className="text-sm text-gray-700">
-            You're not signed in yet. For now, obtain a token from Keycloak and use your API tools. UI login can be added next.
+          <div className="font-medium mb-2">Login required</div>
+          <div className="text-sm text-gray-700 mb-3">
+            Sign in to access ChronosOps features and view your user profile.
           </div>
+          <Link
+            href="/login"
+            className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+          >
+            Sign In →
+          </Link>
         </div>
       )}
 

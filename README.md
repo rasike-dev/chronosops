@@ -90,9 +90,12 @@ pnpm -r dev
 
 ## URLs
 - **Web Console**: http://localhost:3000
+- **Login Page**: http://localhost:3000/login (Sign in with Keycloak)
+- **User Profile**: http://localhost:3000/profile (View user details and roles)
 - **Create Incident**: http://localhost:3000/analyze (Scenarios & Google Cloud import)
 - **Incident List**: http://localhost:3000/incidents
 - **Incident Workspace**: http://localhost:3000/incidents/:id (Full feature showcase)
+- **Analysis Comparison**: http://localhost:3000/incidents/:id/compare/:a/:b (Drift detection)
 - **Export Center**: http://localhost:3000/exports
 - **API**: http://localhost:4000 (or your configured port)
 - **API health**: http://localhost:4000/v1/health (public)
@@ -195,6 +198,8 @@ All records are insert-only (never overwritten) to maintain a full audit trail.
 - **Version Info**: Git SHA, build time, prompt version, generator version
 
 ### Enterprise-Grade UI
+- **Login & Authentication**: Dedicated login page with Keycloak integration
+- **User Profile Page**: Comprehensive user details, roles, and permissions display
 - **Unified Incident Creation**: Source tabs for Scenarios and Google Cloud incidents
 - **Visual Timeline Preview**: Interactive timeline showing deployment → spike → peak
 - **Source Traceability**: Clear badges and metadata showing incident origin
@@ -202,7 +207,7 @@ All records are insert-only (never overwritten) to maintain a full audit trail.
 - **Analysis Dashboard**: Gemini 3 reasoning results with hypothesis ranking and confidence scores
 - **Investigation Loop Timeline**: Real-time iteration tracking with model requests and stop conditions
 - **Explainability Graph**: Visual trace from evidence → reasoning → conclusion (ready for interactive visualization)
-- **Analysis Comparison**: Side-by-side drift detection between multiple runs
+- **Analysis Comparison Page**: Full comparison view with detailed drift detection
 - **Export Center**: Enhanced postmortem and JSON bundle exports with feature highlights
 - **Audit Chain Verification**: One-click integrity verification with tamper detection status
 - **Filtering & Search**: Source and status filters on incident list

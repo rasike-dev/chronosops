@@ -19,6 +19,8 @@ const NAV = [
   { label: 'Analyze', href: '/analyze', requires: ['CHRONOSOPS_ANALYST'] as Role[] },
   { label: 'Scenarios', href: '/scenarios', requires: ['CHRONOSOPS_VIEWER'] as Role[] },
   { label: 'Exports', href: '/exports', requires: ['CHRONOSOPS_VIEWER'] as Role[] },
+  { label: 'Users', href: '/users', requires: ['CHRONOSOPS_ADMIN'] as Role[] },
+  { label: 'Profile', href: '/profile', requires: [] as Role[] },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {

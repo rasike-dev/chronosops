@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { signIn, signOut, useSession } from "next-auth/react"
 import { useWhoAmI } from '@/hooks/useWhoAmI'
 
@@ -45,17 +46,19 @@ export function AuthStatusBar() {
 
       <div className="flex items-center gap-3">
         {authed ? (
-          <button className="text-xs underline text-gray-600" onClick={() => signOut({ callbackUrl: "/" })}>
-            Sign out
-          </button>
+          <>
+            <Link href="/profile" className="text-xs underline text-gray-600">
+              Profile
+            </Link>
+            <button className="text-xs underline text-gray-600" onClick={() => signOut({ callbackUrl: "/login" })}>
+              Sign out
+            </button>
+          </>
         ) : (
-          <button className="text-xs underline text-gray-600" onClick={() => signIn("keycloak")}>
+          <Link href="/login" className="text-xs underline text-gray-600">
             Sign in
-          </button>
+          </Link>
         )}
-        <a className="text-xs underline text-gray-600" href="http://localhost:8088" target="_blank" rel="noreferrer">
-          Keycloak
-        </a>
       </div>
     </div>
   )

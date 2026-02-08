@@ -11,6 +11,7 @@ import { EvidenceCompleteness } from '@/components/EvidenceCompleteness'
 import { EvidenceTypeGrid } from '@/components/EvidenceTypeGrid'
 import { FeatureSection } from '@/components/FeatureSection'
 import { HypothesisCard } from '@/components/HypothesisCard'
+import { ExplainabilityGraph } from '@/components/ExplainabilityGraph'
 
 type Analysis = {
   id: string
@@ -95,12 +96,18 @@ export default function IncidentDetailPage() {
     staleTime: 10_000,
   })
 
-  // Fetch investigation sessions
+  // Fetch investigation sessions with auto-refresh when RUNNING
   const investigationsQuery = useQuery({
     queryKey: ['investigations', id],
     queryFn: () => apiGet<InvestigationSession[]>(`/v1/investigations/incident/${id}`),
     enabled: !!id,
-    staleTime: 5_000,
+    staleTime: 2_000, // Shorter stale time for faster updates
+    refetchInterval: (query) => {
+      // Auto-refresh every 3 seconds if there's a RUNNING session
+      const data = query.state.data as InvestigationSession[] | undefined
+      const hasRunningSession = data?.some((s) => s.status === 'RUNNING')
+      return hasRunningSession ? 3_000 : false
+    },
   })
 
   // Fetch explainability graph for latest analysis
@@ -140,6 +147,10 @@ export default function IncidentDetailPage() {
 
   const latestPostmortem = incidentQuery.data?.postmortems?.[0]
   const sourceType = incidentQuery.data?.sourceType as 'SCENARIO' | 'GOOGLE_CLOUD' | null
+
+  // Check if there's a RUNNING investigation session
+  const hasRunningSession = investigationsQuery.data?.some((s) => s.status === 'RUNNING') ?? false
+  const runningSession = investigationsQuery.data?.find((s) => s.status === 'RUNNING')
 
   // Extract evidence completeness and types from bundle
   const completenessScore = evidenceBundleQuery.data?.completenessScore || 0
@@ -215,18 +226,24 @@ export default function IncidentDetailPage() {
 
               <div className="flex gap-2">
                 <button
-                  className="px-3 py-2 rounded-lg border bg-white text-sm hover:bg-gray-50 disabled:opacity-50"
+                  className="px-3 py-2 rounded-lg border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => reanalyze.mutate()}
-                  disabled={reanalyze.isPending}
+                  disabled={reanalyze.isPending || hasRunningSession}
+                  title={hasRunningSession ? 'Cannot reanalyze while investigation is running' : undefined}
                 >
                   {reanalyze.isPending ? 'Reanalyzing…' : 'Reanalyze'}
                 </button>
                 <button
-                  className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50"
+                  className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => startInvestigation.mutate({ maxIterations: 5, confidenceTarget: 0.8 })}
-                  disabled={startInvestigation.isPending}
+                  disabled={startInvestigation.isPending || hasRunningSession}
+                  title={hasRunningSession ? `Investigation in progress (Session: ${runningSession?.sessionId.slice(0, 8)}...)` : undefined}
                 >
-                  {startInvestigation.isPending ? 'Starting…' : 'Start Investigation'}
+                  {startInvestigation.isPending
+                    ? 'Starting…'
+                    : hasRunningSession
+                      ? `Investigation Running (${runningSession?.currentIteration}/${runningSession?.maxIterations})`
+                      : 'Start Investigation'}
                 </button>
               </div>
             </div>
@@ -361,6 +378,16 @@ export default function IncidentDetailPage() {
               description="Bounded iterations with model-directed evidence requests"
               className="mb-6"
             >
+              {hasRunningSession && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                    <div className="text-sm font-medium text-blue-900">
+                      Investigation in progress... Auto-refreshing every 3 seconds
+                    </div>
+                  </div>
+                </div>
+              )}
               {investigationsQuery.data.map((session) => (
                 <div key={session.sessionId} className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -368,6 +395,9 @@ export default function IncidentDetailPage() {
                       <div className="text-sm font-medium">Session {session.sessionId.slice(0, 8)}</div>
                       <div className="text-xs text-gray-500">
                         Iteration {session.currentIteration} / {session.maxIterations}
+                        {session.status === 'RUNNING' && (
+                          <span className="ml-2 text-blue-600">● Running</span>
+                        )}
                       </div>
                     </div>
                     <StatusBadge status={session.status as any} />
@@ -428,20 +458,7 @@ export default function IncidentDetailPage() {
               description="Visual trace from evidence → reasoning → conclusion"
               className="mb-6"
             >
-              <div className="p-4 bg-gray-50 rounded-lg border">
-                <div className="text-sm text-gray-600 mb-2">
-                  {explainabilityGraphQuery.data.nodes?.length || 0} nodes ·{' '}
-                  {explainabilityGraphQuery.data.edges?.length || 0} edges
-                </div>
-                <div className="text-xs text-gray-500">
-                  Interactive graph visualization would render here. Click nodes to explore evidence → hypothesis →
-                  conclusion paths.
-                </div>
-                <div className="mt-3 text-xs text-gray-600">
-                  <div>Node types: Evidence, Claim, Hypothesis, Action, Conclusion</div>
-                  <div>Edges show traceability via evidenceRefs</div>
-                </div>
-              </div>
+              <ExplainabilityGraph graph={explainabilityGraphQuery.data} />
             </FeatureSection>
           )}
 

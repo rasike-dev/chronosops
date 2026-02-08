@@ -2041,6 +2041,13 @@ export class IncidentsController {
       if (error instanceof BadRequestException || error instanceof HttpException) {
         throw error;
       }
+      // Handle conflict (already running investigation)
+      if (error?.statusCode === 409 || error?.code === 'INVESTIGATION_ALREADY_RUNNING') {
+        throw new HttpException(
+          error.message || 'An investigation is already running for this incident',
+          HttpStatus.CONFLICT,
+        );
+      }
       console.error('[IncidentsController.startInvestigation] Error:', error?.message || error);
       throw new HttpException(
         `Failed to start investigation: ${error?.message || 'Unknown error'}`,

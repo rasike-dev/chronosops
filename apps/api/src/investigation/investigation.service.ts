@@ -68,6 +68,24 @@ export class InvestigationService {
       throw new Error(`Incident not found: ${incidentId}`);
     }
 
+    // Check if there's already a RUNNING session for this incident
+    const existingRunningSession = await this.prisma.investigationSession.findFirst({
+      where: {
+        incidentId,
+        status: "RUNNING",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (existingRunningSession) {
+      const error = new Error(
+        `An investigation is already running for this incident. Session ID: ${existingRunningSession.id}. Please wait for it to complete.`,
+      );
+      (error as any).statusCode = 409; // Conflict
+      (error as any).code = 'INVESTIGATION_ALREADY_RUNNING';
+      throw error;
+    }
+
     // Create session
     const session = await this.prisma.investigationSession.create({
       data: {

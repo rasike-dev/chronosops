@@ -2,11 +2,11 @@ import React from 'react'
 import '../src/app/globals.css'
 import Providers from '../src/app/providers'
 import AuthProvider from '../src/app/auth-provider'
-import { AppShell } from '@/components/AppShell'
+import { ConditionalAppShell } from '@/components/ConditionalAppShell'
 
 export const metadata = {
-  title: "ChronosOps MVP",
-  description: "Latency spike after deployment demo",
+  title: "ChronosOps — Enterprise Autonomous SRE",
+  description: "Evidence-first incident investigation with explainable AI reasoning",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AuthProvider>
           <Providers>
-            <AppShell>{children}</AppShell>
+            <ConditionalAppShell>{children}</ConditionalAppShell>
           </Providers>
         </AuthProvider>
       </body>
