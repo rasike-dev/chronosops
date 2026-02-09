@@ -188,3 +188,31 @@ model AuditEvent {
   @@index([createdAt])
   @@index([entityType, entityId])
 }
+
+model Scenario {
+  id          String   @id @default(cuid())
+  scenarioId  String   @unique // e.g. "latency-spike"
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Deployment information
+  deploymentId String
+  serviceId    String
+  versionFrom  String
+  versionTo    String
+  deploymentTimestamp DateTime
+
+  // Metrics data (stored as JSON array)
+  metrics     Json     // Array of MetricPoint
+
+  // Metadata
+  tags        String[] // e.g. ["latency", "production", "deployment"]
+  category    String?  // e.g. "latency", "errors", "capacity"
+  severity    String?  // e.g. "low", "medium", "high", "critical"
+
+  @@index([scenarioId])
+  @@index([category])
+  @@index([createdAt])
+}

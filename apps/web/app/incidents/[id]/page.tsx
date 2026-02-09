@@ -171,10 +171,11 @@ export default function IncidentDetailPage() {
     return acc
   }, [] as any[]) || []
 
-  // Extract hypotheses from analysis
-  const hypotheses = latestAnalysis?.resultJson?.hypotheses || []
-  const overallConfidence = latestAnalysis?.resultJson?.overallConfidence || 0
-  const primarySignal = latestAnalysis?.resultJson?.explainability?.primarySignal
+  // Extract hypotheses and confidence from reasoningJson (Gemini response) or fallback to resultJson
+  const reasoningJson = latestAnalysis?.reasoningJson as any
+  const hypotheses = reasoningJson?.hypotheses || latestAnalysis?.resultJson?.hypotheses || []
+  const overallConfidence = reasoningJson?.overallConfidence ?? latestAnalysis?.resultJson?.overallConfidence ?? 0
+  const primarySignal = reasoningJson?.explainability?.primarySignal || latestAnalysis?.resultJson?.explainability?.primarySignal
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

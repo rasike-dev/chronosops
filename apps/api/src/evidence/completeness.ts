@@ -7,18 +7,34 @@ export function computeEvidenceCompleteness(input: {
 }) {
   const artifacts = Array.isArray(input.bundle?.artifacts) ? input.bundle.artifacts : [];
   const kinds = new Set<string>(artifacts.map((a: any) => a?.kind).filter(Boolean));
-  const sources = new Set<string>(Array.isArray(input.bundle?.sources) ? input.bundle.sources : []);
+  const sourcesArray = Array.isArray(input.bundle?.sources) ? input.bundle.sources : [];
+  const sources = new Set<string>(sourcesArray);
+
+  // Debug logging
+  console.log(`[computeEvidenceCompleteness] Artifacts count: ${artifacts.length}, Kinds:`, Array.from(kinds));
+  console.log(`[computeEvidenceCompleteness] Sources:`, sourcesArray);
 
   const present: string[] = [];
 
-  const has = (k: string) => kinds.has(k) || sources.has(k);
-
-  const presentMetrics = has("metrics_summary") || sources.has("GCP_METRICS");
-  const presentLogs = has("logs_summary") || sources.has("GCP_LOGS");
-  const presentTraces = has("traces_summary") || sources.has("GCP_TRACES");
-  const presentDeploys = has("deploys_summary") || sources.has("DEPLOYS");
-  const presentConfig = has("config_diff_summary") || sources.has("CONFIG");
+  // Check for evidence types - check both artifact kinds AND source tags
+  // Source tags: GCP_METRICS, GCP_LOGS, GCP_TRACES, DEPLOYS, CONFIG, GOOGLE_CLOUD, SCENARIO
+  const presentMetrics = kinds.has("metrics_summary") || sources.has("GCP_METRICS");
+  const presentLogs = kinds.has("logs_summary") || sources.has("GCP_LOGS");
+  const presentTraces = kinds.has("traces_summary") || sources.has("GCP_TRACES");
+  const presentDeploys = kinds.has("deploys_summary") || sources.has("DEPLOYS");
+  const presentConfig = kinds.has("config_diff_summary") || sources.has("CONFIG");
   const presentGoogle = Boolean(input.bundle?.googleEvidenceLite) || sources.has("GOOGLE_CLOUD");
+  
+  console.log(`[computeEvidenceCompleteness] Present checks:`, {
+    metrics: presentMetrics,
+    logs: presentLogs,
+    traces: presentTraces,
+    deploys: presentDeploys,
+    config: presentConfig,
+    google: presentGoogle,
+    kinds: Array.from(kinds),
+    sources: Array.from(sources),
+  });
 
   if (presentMetrics) present.push("METRICS");
   if (presentLogs) present.push("LOGS");
@@ -36,13 +52,16 @@ export function computeEvidenceCompleteness(input: {
   if (presentConfig) score += 15;
   if (input.incidentSourceType === "GOOGLE_CLOUD" && presentGoogle) score += 5;
 
-  // Stub penalty
+  // Stub penalty (only penalize STUB mode, not SCENARIO mode)
   let stubPenalty = 0;
   for (const a of artifacts) {
     const mode = a?.payload?.completeness?.mode;
     if (mode === "STUB") stubPenalty += 5;
+    // SCENARIO mode is treated as real data (no penalty)
   }
   score = Math.max(0, Math.min(100, score - stubPenalty));
+  
+  console.log(`[computeEvidenceCompleteness] Score: ${score}, Stub penalty: ${stubPenalty}, Present:`, present);
 
   const missing: Array<ReturnType<typeof EvidenceNeedSchema.parse>> = [];
 

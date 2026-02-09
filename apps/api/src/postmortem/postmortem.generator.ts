@@ -120,13 +120,25 @@ export function generatePostmortemV2(input: PostmortemGeneratorInput): Postmorte
   const primarySignal = analysis.reasoningJson?.explainability?.primarySignal || "UNKNOWN";
   const reasoningRationale = analysis.reasoningJson?.explainability?.rationale || "Analysis in progress.";
   
-  const topHypotheses = (analysis.reasoningJson?.hypotheses || []).slice(0, 10).map((h: any) => ({
-    id: h.id,
-    title: h.title,
-    confidence: h.confidence,
-    rationale: h.rationale,
-    evidenceRefs: h.evidenceRefs || [],
-  }));
+  const rawHypotheses = analysis.reasoningJson?.hypotheses || [];
+  const topHypotheses = rawHypotheses.length > 0
+    ? rawHypotheses.slice(0, 10).map((h: any) => ({
+        id: h.id,
+        title: h.title,
+        confidence: h.confidence,
+        rationale: h.rationale,
+        evidenceRefs: h.evidenceRefs || [],
+      }))
+    : [
+        // Fallback hypothesis if none provided (required by schema)
+        {
+          id: "UNKNOWN",
+          title: "Root cause analysis pending",
+          confidence: 0.0,
+          rationale: "Insufficient evidence or reasoning not yet completed. Additional investigation required.",
+          evidenceRefs: [],
+        },
+      ];
 
   // Actions
   const actions = (analysis.reasoningJson?.recommendedActions || []).slice(0, 20).map((a: any) => ({

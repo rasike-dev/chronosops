@@ -30,6 +30,7 @@ import { buildExplainabilityGraph } from "./analysis/explainability-graph.builde
 import { AuditService } from "../../audit/audit.service";
 import { AuditVerifyService } from "./analysis/audit-verify.service";
 import { IncidentNormalizer, type NormalizedIncident } from "./ingestion/incident-normalizer";
+import { buildScenarioEvidenceArtifacts } from "../../evidence/scenario-evidence.builder";
 
 @Controller("v1/incidents")
 export class IncidentsController {
@@ -98,6 +99,37 @@ export class IncidentsController {
       
       if (!incident) {
         throw new HttpException(`Incident not found: ${id}`, HttpStatus.NOT_FOUND);
+      }
+      
+      // Recalculate evidence completeness for latest analysis if it has a bundle
+      // This ensures old analyses show updated completeness scores after fixes
+      if (incident.analyses.length > 0) {
+        const latestAnalysis = incident.analyses[0];
+        if (latestAnalysis.evidenceBundleId) {
+          const bundle = await this.prisma.evidenceBundle.findUnique({
+            where: { id: latestAnalysis.evidenceBundleId },
+            select: { payload: true },
+          });
+          
+          if (bundle) {
+            // Recalculate completeness from current bundle
+            const bundlePayload = bundle.payload as any;
+            console.log(`[IncidentsController.detail] Recalculating completeness for incident ${id}`);
+            console.log(`[IncidentsController.detail] Bundle payload sources:`, bundlePayload?.sources);
+            console.log(`[IncidentsController.detail] Bundle payload artifacts count:`, bundlePayload?.artifacts?.length || 0);
+            
+            const recalculatedCompleteness = computeEvidenceCompleteness({
+              incidentSourceType: incident.sourceType,
+              primarySignal: (latestAnalysis.resultJson as any)?.explainability?.primarySignal ?? "UNKNOWN",
+              bundle: bundlePayload,
+            });
+            
+            console.log(`[IncidentsController.detail] Recalculated completeness score:`, recalculatedCompleteness.score);
+            
+            // Update the latest analysis's completeness in the response
+            latestAnalysis.evidenceCompleteness = recalculatedCompleteness as any;
+          }
+        }
       }
       
       // Day 18: Data exposure control - hide sourcePayload from non-admin
@@ -410,7 +442,7 @@ export class IncidentsController {
         const req = AnalyzeIncidentRequestSchema.parse(originalRequest);
 
         // Re-run analyzer using stored requestJson (same logic as analyze endpoint)
-        const scenario = this.scenarios.getById(req.scenarioId);
+        const scenario = await this.scenarios.getById(req.scenarioId);
         const analysisResult = await this.performAnalysis(scenario, req);
         
         // Set incidentId in the result
@@ -432,6 +464,24 @@ export class IncidentsController {
         const windowEnd = new Date(deployTime.getTime() + windowMinutesAfter * 60 * 1000);
         
         const collectorArtifacts = [];
+        
+        // For scenarios, build evidence artifacts from scenario data first
+        // This ensures high evidence completeness scores
+        try {
+          const scenarioArtifacts = buildScenarioEvidenceArtifacts(scenario, {
+            start: windowStart.toISOString(),
+            end: windowEnd.toISOString(),
+          });
+          console.log(`[IncidentsController.reanalyze] Generated ${scenarioArtifacts.length} scenario artifacts:`, scenarioArtifacts.map(a => a.kind));
+          if (scenarioArtifacts.length === 0) {
+            console.warn(`[IncidentsController.reanalyze] WARNING: No scenario artifacts generated! Scenario:`, scenario.scenarioId, `Metrics count:`, scenario.metrics?.length || 0);
+          }
+          collectorArtifacts.push(...scenarioArtifacts);
+        } catch (error: any) {
+          console.error(`[IncidentsController.reanalyze] ERROR building scenario artifacts:`, error?.message || error);
+          // Continue without scenario artifacts (fallback to collectors)
+        }
+        
         const collectContext = {
           incidentId: incident.id,
           window: {
@@ -444,7 +494,7 @@ export class IncidentsController {
           ],
         };
         
-        // Collect from all collectors
+        // Collect from all collectors (these may return STUB data, but scenario artifacts take precedence)
         const [metricsResult, deploysResult, configDiffResult, logsResult, tracesResult] = await Promise.all([
           this.gcpMetricsCollector.collect(collectContext),
           this.deploysCollector.collect(collectContext),
@@ -453,11 +503,14 @@ export class IncidentsController {
           this.tracesCollector.collect(collectContext),
         ]);
         
-        if (metricsResult) collectorArtifacts.push(metricsResult);
-        if (deploysResult) collectorArtifacts.push(deploysResult);
-        if (configDiffResult) collectorArtifacts.push(configDiffResult);
-        if (logsResult) collectorArtifacts.push(logsResult);
-        if (tracesResult) collectorArtifacts.push(tracesResult);
+        // Only add collector results if they don't conflict with scenario artifacts
+        // Scenario artifacts are marked as REAL/SCENARIO mode and should take precedence
+        const existingKinds = new Set(collectorArtifacts.map(a => a.kind));
+        if (metricsResult && !existingKinds.has("metrics_summary")) collectorArtifacts.push(metricsResult);
+        if (deploysResult && !existingKinds.has("deploys_summary")) collectorArtifacts.push(deploysResult);
+        if (configDiffResult && !existingKinds.has("config_diff_summary")) collectorArtifacts.push(configDiffResult);
+        if (logsResult && !existingKinds.has("logs_summary")) collectorArtifacts.push(logsResult);
+        if (tracesResult && !existingKinds.has("traces_summary")) collectorArtifacts.push(tracesResult);
 
         const bundle = buildEvidenceBundle({
           incidentId: incident.id,
@@ -479,11 +532,15 @@ export class IncidentsController {
         });
 
         // 5) Compute evidence completeness
+        const bundlePayload = savedBundle.payload as any;
+        console.log(`[IncidentsController.reanalyze] Bundle artifacts:`, bundlePayload?.artifacts?.map((a: any) => a.kind));
+        console.log(`[IncidentsController.reanalyze] Bundle sources:`, bundlePayload?.sources);
         const completeness = computeEvidenceCompleteness({
           incidentSourceType: incident.sourceType,
           primarySignal: analysisResult.explainability?.primarySignal ?? "UNKNOWN",
-          bundle: savedBundle.payload,
+          bundle: bundlePayload,
         });
+        console.log(`[IncidentsController.reanalyze] Evidence completeness score:`, completeness.score, `present:`, completeness.present);
 
         // 6) Select hypothesis candidates and build reasoning request
         const artifacts = bundle.artifacts || [];
@@ -654,7 +711,7 @@ export class IncidentsController {
   async analyze(@Body() body: any, @Req() httpReq: { user?: CurrentUser }) {
     try {
     const reqBody = AnalyzeIncidentRequestSchema.parse(body);
-      const scenario = this.scenarios.getById(reqBody.scenarioId);
+      const scenario = await this.scenarios.getById(reqBody.scenarioId);
 
       // 1) Create incident
       const incident = await this.persistence.createIncident({
@@ -680,6 +737,26 @@ export class IncidentsController {
       const windowEnd = new Date(deployTime.getTime() + reqBody.windowMinutesAfter * 60 * 1000);
       
       const collectorArtifacts = [];
+      
+      // For scenarios, build evidence artifacts from scenario data first
+      // This ensures high evidence completeness scores
+      try {
+        const scenarioArtifacts = buildScenarioEvidenceArtifacts(scenario, {
+          start: windowStart.toISOString(),
+          end: windowEnd.toISOString(),
+        });
+        console.log(`[IncidentsController.analyze] Generated ${scenarioArtifacts.length} scenario artifacts:`, scenarioArtifacts.map(a => a.kind));
+        if (scenarioArtifacts.length === 0) {
+          console.warn(`[IncidentsController.analyze] WARNING: No scenario artifacts generated! Scenario:`, scenario.scenarioId, `Metrics count:`, scenario.metrics?.length || 0);
+        }
+        collectorArtifacts.push(...scenarioArtifacts);
+      } catch (error: any) {
+        console.error(`[IncidentsController.analyze] ERROR building scenario artifacts:`, error?.message || error);
+        // Continue without scenario artifacts (fallback to collectors)
+      }
+      
+      // Also try to collect from real collectors (they'll return STUB if not configured)
+      // This provides additional context even if in STUB mode
       const collectContext = {
         incidentId: incident.id,
         window: {
@@ -692,7 +769,7 @@ export class IncidentsController {
         ],
       };
       
-      // Collect from all collectors
+      // Collect from all collectors (these may return STUB data, but scenario artifacts take precedence)
       const [metricsResult, deploysResult, configDiffResult, logsResult, tracesResult] = await Promise.all([
         this.gcpMetricsCollector.collect(collectContext),
         this.deploysCollector.collect(collectContext),
@@ -701,11 +778,14 @@ export class IncidentsController {
         this.tracesCollector.collect(collectContext),
       ]);
       
-      if (metricsResult) collectorArtifacts.push(metricsResult);
-      if (deploysResult) collectorArtifacts.push(deploysResult);
-      if (configDiffResult) collectorArtifacts.push(configDiffResult);
-      if (logsResult) collectorArtifacts.push(logsResult);
-      if (tracesResult) collectorArtifacts.push(tracesResult);
+      // Only add collector results if they don't conflict with scenario artifacts
+      // Scenario artifacts are marked as REAL/SCENARIO mode and should take precedence
+      const existingKinds = new Set(collectorArtifacts.map(a => a.kind));
+      if (metricsResult && !existingKinds.has("metrics_summary")) collectorArtifacts.push(metricsResult);
+      if (deploysResult && !existingKinds.has("deploys_summary")) collectorArtifacts.push(deploysResult);
+      if (configDiffResult && !existingKinds.has("config_diff_summary")) collectorArtifacts.push(configDiffResult);
+      if (logsResult && !existingKinds.has("logs_summary")) collectorArtifacts.push(logsResult);
+      if (tracesResult && !existingKinds.has("traces_summary")) collectorArtifacts.push(tracesResult);
 
       // 4) Build evidence bundle with collector artifacts
       const bundle = buildEvidenceBundle({
@@ -734,11 +814,15 @@ export class IncidentsController {
       analysisResult.incidentId = incident.id;
 
       // 7) Compute evidence completeness
+      const bundlePayload = savedBundle.payload as any;
+      console.log(`[IncidentsController.analyze] Bundle artifacts:`, bundlePayload?.artifacts?.map((a: any) => a.kind));
+      console.log(`[IncidentsController.analyze] Bundle sources:`, bundlePayload?.sources);
       const completeness = computeEvidenceCompleteness({
         incidentSourceType: incident.sourceType,
         primarySignal: analysisResult.explainability?.primarySignal ?? "UNKNOWN",
-        bundle: savedBundle.payload,
+        bundle: bundlePayload,
       });
+      console.log(`[IncidentsController.analyze] Evidence completeness score:`, completeness.score, `present:`, completeness.present);
 
       // 8) Select hypothesis candidates (deterministic preselector)
       const artifacts = bundle.artifacts || [];
@@ -1653,6 +1737,31 @@ export class IncidentsController {
       const isAdmin = httpReq.user?.roles?.includes("CHRONOSOPS_ADMIN");
       const redactedPayload = isAdmin ? bundle.payload : redactEvidenceBundle(bundle.payload);
 
+      // Get incident to determine source type
+      const incident = await this.prisma.incident.findUnique({
+        where: { id: bundle.incidentId },
+        select: { sourceType: true },
+      });
+
+      // Get latest analysis to determine primary signal
+      const latestAnalysis = await this.prisma.incidentAnalysis.findFirst({
+        where: { 
+          incidentId: bundle.incidentId,
+          evidenceBundleId: bundle.bundleId,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { resultJson: true },
+      });
+
+      // Calculate evidence completeness
+      const bundlePayload = bundle.payload as any;
+      const primarySignal = (latestAnalysis?.resultJson as any)?.explainability?.primarySignal ?? "UNKNOWN";
+      const completeness = computeEvidenceCompleteness({
+        incidentSourceType: incident?.sourceType || "SCENARIO",
+        primarySignal: primarySignal === "latency" ? "latency" : primarySignal === "errors" ? "errors" : "UNKNOWN",
+        bundle: bundlePayload,
+      });
+
       return {
         bundleId: bundle.bundleId,
         incidentId: bundle.incidentId,
@@ -1662,6 +1771,9 @@ export class IncidentsController {
         payload: redactedPayload,
         hashAlgo: bundle.hashAlgo,
         hashInputVersion: bundle.hashInputVersion,
+        artifacts: bundlePayload?.artifacts || [],
+        completenessScore: completeness.score,
+        completeness: completeness,
       };
     } catch (error: any) {
       if (error instanceof HttpException) {

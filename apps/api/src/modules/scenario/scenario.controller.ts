@@ -9,19 +9,21 @@ export class ScenarioController {
 
   @Public()
   @Get()
-  list() {
-    return ScenarioListSchema.parse(this.scenarios.list());
+  async list() {
+    const scenarios = await this.scenarios.list();
+    return ScenarioListSchema.parse(scenarios);
   }
 
   @Public()
   @Get("latency-spike")
-  getLatencySpike() {
-    return this.scenarios.getLatencySpike();
+  async getLatencySpike() {
+    // Backward compatibility - redirect to getById
+    return this.scenarios.getById("latency-spike");
   }
 
   @Public()
   @Get(":scenarioId")
-  getScenario(@Param("scenarioId") scenarioId: string) {
-    return this.scenarios.getById(scenarioId);
+  async getScenario(@Param("scenarioId") scenarioId: string) {
+    return await this.scenarios.getById(scenarioId);
   }
 }
