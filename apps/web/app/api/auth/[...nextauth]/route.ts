@@ -2,59 +2,61 @@ import NextAuth from "next-auth"
 import KeycloakProvider from "next-auth/providers/keycloak"
 import CredentialsProvider from "next-auth/providers/credentials"
 
-// Validate required environment variables
+// Keycloak configuration (optional - can use credentials provider instead)
 const keycloakIssuer = process.env.KEYCLOAK_ISSUER
 const keycloakClientId = process.env.KEYCLOAK_CLIENT_ID
 const keycloakClientSecret = process.env.KEYCLOAK_CLIENT_SECRET
 
-if (!keycloakIssuer || !keycloakClientId || !keycloakClientSecret) {
-  throw new Error(
-    `Missing required Keycloak environment variables. ` +
-    `KEYCLOAK_ISSUER: ${keycloakIssuer ? 'set' : 'missing'}, ` +
-    `KEYCLOAK_CLIENT_ID: ${keycloakClientId ? 'set' : 'missing'}, ` +
-    `KEYCLOAK_CLIENT_SECRET: ${keycloakClientSecret ? 'set' : 'missing'}`
-  )
-}
+const providers: any[] = [
+  // Credentials provider (always available for dev access)
+  CredentialsProvider({
+    id: "credentials",
+    name: "Credentials",
+    credentials: {
+      username: { label: "Username", type: "text" },
+      password: { label: "Password", type: "password" },
+    },
+    async authorize(credentials) {
+      // Dev credentials for quick access
+      if (
+        credentials?.username === "dev-admin" &&
+        credentials?.password === "devpass"
+      ) {
+        // Return a user object that matches the expected format
+        return {
+          id: "dev-admin",
+          email: "dev-admin@chronosops.local",
+          name: "Dev Admin",
+          sub: "dev-admin",
+          // Add default admin roles
+          roles: ["CHRONOSOPS_ADMIN", "CHRONOSOPS_ANALYST", "CHRONOSOPS_VIEWER"],
+        } as any
+      }
+      return null
+    },
+  }),
+]
 
-// Ensure issuer URL is absolute
-const issuerUrl = keycloakIssuer.startsWith('http') 
-  ? keycloakIssuer 
-  : `http://${keycloakIssuer}`
-
-const handler = NextAuth({
-  providers: [
+// Add Keycloak provider only if all required variables are configured
+if (keycloakIssuer && keycloakClientId && keycloakClientSecret) {
+  const issuerUrl = keycloakIssuer.startsWith('http') 
+    ? keycloakIssuer 
+    : `http://${keycloakIssuer}`
+  
+  providers.push(
     KeycloakProvider({
       clientId: keycloakClientId,
       clientSecret: keycloakClientSecret,
       issuer: issuerUrl,
-    }),
-    CredentialsProvider({
-      id: "credentials",
-      name: "Credentials",
-      credentials: {
-        username: { label: "Username", type: "text" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        // Dev credentials for quick access
-        if (
-          credentials?.username === "dev-admin" &&
-          credentials?.password === "devpass"
-        ) {
-          // Return a user object that matches the expected format
-          return {
-            id: "dev-admin",
-            email: "dev-admin@chronosops.local",
-            name: "Dev Admin",
-            sub: "dev-admin",
-            // Add default admin roles
-            roles: ["CHRONOSOPS_ADMIN", "CHRONOSOPS_ANALYST", "CHRONOSOPS_VIEWER"],
-          } as any
-        }
-        return null
-      },
-    }),
-  ],
+    })
+  )
+} else {
+  // Log warning but don't fail - credentials provider will work
+  console.warn('[NextAuth] Keycloak not configured - using credentials provider only')
+}
+
+const handler = NextAuth({
+  providers,
   session: { strategy: "jwt" },
   callbacks: {
     // Persist Keycloak tokens into the NextAuth JWT

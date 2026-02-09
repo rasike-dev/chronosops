@@ -1,6 +1,7 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useWhoAmI } from '@/hooks/useWhoAmI'
 
@@ -33,9 +34,36 @@ function reqLabel(required: Role[]) {
 }
 
 export function FeatureLauncher() {
+  const router = useRouter()
   const q = useWhoAmI()
   const roles = q.data?.user?.roles ?? []
   const authed = !!q.data?.authenticated
+
+  // Auto-redirect to login if not authenticated
+  useEffect(() => {
+    if (!q.isLoading && !authed) {
+      router.push('/login')
+    }
+  }, [q.isLoading, authed, router])
+
+  // Show loading state while checking auth
+  if (q.isLoading) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="text-gray-600 mb-2">Checking authentication...</div>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // If not authenticated, show nothing (redirect is happening)
+  if (!authed) {
+    return null
+  }
 
   return (
     <div className="p-6">
@@ -44,20 +72,6 @@ export function FeatureLauncher() {
         Evidence-first incident investigation with replayable analyses and shareable postmortems.
       </p>
 
-      {!authed && !q.isLoading && (
-        <div className="mt-4 p-3 rounded-lg border bg-amber-50">
-          <div className="font-medium mb-2">Login required</div>
-          <div className="text-sm text-gray-700 mb-3">
-            Sign in to access ChronosOps features and view your user profile.
-          </div>
-          <Link
-            href="/login"
-            className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-          >
-            Sign In →
-          </Link>
-        </div>
-      )}
 
       <div className="grid md:grid-cols-2 gap-4 mt-6">
         {FEATURES.map((f) => {
