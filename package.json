@@ -5,7 +5,9 @@
     "scripts": {
       "dev": "pnpm -r --parallel dev",
       "dev:api": "pnpm -C apps/api start:dev",
-      "dev:web": "pnpm -C apps/web dev"
+      "dev:web": "pnpm -C apps/web dev",
+      "debug:api": "pnpm -C apps/api debug",
+      "debug:api:brk": "pnpm -C apps/api debug:brk"
     },
     "dependencies": {
       "@chronosops/contracts": "workspace:*",

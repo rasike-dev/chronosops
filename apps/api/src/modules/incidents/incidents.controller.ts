@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpException, HttpStatus, Param, Post, Req } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, HttpException, HttpStatus, NotFoundException, Param, Post, Req } from "@nestjs/common";
 import { AnalyzeIncidentRequestSchema, AnalyzeIncidentResponseSchema, ImportGoogleIncidentsRequestSchema, IngestIncidentRequestSchema, IngestIncidentResponseSchema } from "@chronosops/contracts";
 import { ScenarioService } from "../scenario/scenario.service";
 import { IncidentsPersistenceService } from "./incidents.persistence.service";
@@ -439,10 +439,48 @@ export class IncidentsController {
         };
       } else {
         // Handle scenario-based incidents (existing flow)
-        const req = AnalyzeIncidentRequestSchema.parse(originalRequest);
+        // Try to parse with schema, but handle missing scenarioId gracefully
+        let req: any;
+        try {
+          req = AnalyzeIncidentRequestSchema.parse(originalRequest);
+        } catch (parseError: any) {
+          // If scenarioId is missing, try to get it from incident or use defaults
+          // Safely serialize error to avoid Node inspect issues
+          const errorMessage = parseError?.message || parseError?.toString() || 'Unknown parse error';
+          const errorDetails = parseError?.issues ? JSON.stringify(parseError.issues, null, 2) : '';
+          console.warn(`[IncidentsController.reanalyze] Failed to parse requestJson with schema: ${errorMessage}`, errorDetails || '');
+          if (incident.sourceType === 'SCENARIO' && incident.scenarioId) {
+            // For scenario incidents, use incident.scenarioId if stored request doesn't have it
+            req = {
+              scenarioId: incident.scenarioId,
+              windowMinutesBefore: originalRequest?.windowMinutesBefore || 15,
+              windowMinutesAfter: originalRequest?.windowMinutesAfter || 15,
+            };
+            console.log(`[IncidentsController.reanalyze] Using scenarioId from incident: ${incident.scenarioId}`);
+          } else {
+            // For non-scenario incidents, we can't reanalyze with scenario flow
+            throw new HttpException(
+              `Cannot reanalyze non-scenario incident using scenario flow. Incident sourceType: ${incident.sourceType}`,
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+        }
 
         // Re-run analyzer using stored requestJson (same logic as analyze endpoint)
-        const scenario = await this.scenarios.getById(req.scenarioId);
+        let scenario;
+        try {
+          scenario = await this.scenarios.getById(req.scenarioId);
+        } catch (error: any) {
+          console.error(`[IncidentsController.reanalyze] Failed to get scenario ${req.scenarioId}:`, error?.message || error);
+          if (error instanceof NotFoundException) {
+            throw new HttpException(
+              `Scenario not found: ${req.scenarioId}. Cannot reanalyze incident.`,
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          throw error;
+        }
+        
         const analysisResult = await this.performAnalysis(scenario, req);
         
         // Set incidentId in the result
@@ -591,8 +629,18 @@ export class IncidentsController {
         let reasoningResult = null;
         let reasoningResponse = null;
         try {
+          console.log('[IncidentsController.reanalyze] ===== CALLING GEMINI REASONING =====');
+          console.log('[IncidentsController.reanalyze] GEMINI_API_KEY status:', process.env.GEMINI_API_KEY ? `✅ Set (length: ${process.env.GEMINI_API_KEY.length})` : '❌ NOT SET');
+          console.log('[IncidentsController.reanalyze] GEMINI_MODEL:', process.env.GEMINI_MODEL || 'gemini-3-flash-preview (default)');
+          console.log('[IncidentsController.reanalyze] Incident ID:', incident.id);
+          console.log('[IncidentsController.reanalyze] Evidence artifacts:', bundle.artifacts.length);
+          
           reasoningResult = await this.reasoningAdapter.reason(reasoningRequest);
           reasoningResponse = reasoningResult.response;
+          
+          console.log('[IncidentsController.reanalyze] ✅ Gemini reasoning succeeded!');
+          console.log('[IncidentsController.reanalyze] Overall confidence:', reasoningResponse.overallConfidence);
+          console.log('[IncidentsController.reanalyze] Hypotheses count:', reasoningResponse.hypotheses?.length || 0);
           
           const promptHash = hashPromptParts(reasoningResult.prompt.system, reasoningResult.prompt.user);
           const requestHash = hashRequest(reasoningRequest);
@@ -606,7 +654,19 @@ export class IncidentsController {
             userPrompt: reasoningResult.prompt.user,
           };
         } catch (error: any) {
-          console.error('[IncidentsController.reanalyze] Reasoning adapter failed:', error?.message || error);
+          console.error('[IncidentsController.reanalyze] ❌ Reasoning adapter failed:', error?.message || error);
+          console.error('[IncidentsController.reanalyze] Error stack:', error?.stack);
+          console.error('[IncidentsController.reanalyze] Error details:', {
+            name: error?.name,
+            code: error?.code,
+            message: error?.message,
+            cause: error?.cause,
+          });
+          // Don't silently fail - throw the error so it's visible
+          throw new HttpException(
+            `Gemini reasoning failed: ${error?.message || 'Unknown error'}. Check GEMINI_API_KEY and server logs.`,
+            HttpStatus.INTERNAL_SERVER_ERROR,
+          );
         }
 
         // 8) Persist new analysis row with bundle link (always inserts - preserves audit trail)
@@ -698,9 +758,23 @@ export class IncidentsController {
       if (error instanceof HttpException) {
         throw error;
       }
-      console.error('[IncidentsController.reanalyze] Error:', error?.message || error);
+      // Handle Zod validation errors
+      if (error?.name === 'ZodError' || error?.issues) {
+        const zodError = error as any;
+        const errorMessages = zodError.issues?.map((issue: any) => 
+          `${issue.path?.join('.') || 'root'}: ${issue.message}`
+        ) || ['Validation failed'];
+        console.error('[IncidentsController.reanalyze] Zod validation error:', errorMessages);
+        throw new HttpException(
+          `Failed to reanalyze incident: Validation error - ${errorMessages.join(', ')}`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      // Handle other errors
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      console.error('[IncidentsController.reanalyze] Error:', errorMessage, error?.stack);
       throw new HttpException(
-        `Failed to reanalyze incident: ${error?.message || 'Unknown error'}`,
+        `Failed to reanalyze incident: ${errorMessage}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -877,12 +951,23 @@ export class IncidentsController {
         candidates,
       });
 
-      // 10) Call reasoning adapter (stubbed for Day 11)
+      // 10) Call reasoning adapter (Gemini 3 Flash Preview)
       let reasoningResult = null;
       let reasoningResponse = null;
       try {
+        console.log(`[IncidentsController.analyze] ===== CALLING GEMINI REASONING =====`);
+        console.log(`[IncidentsController.analyze] GEMINI_API_KEY status:`, process.env.GEMINI_API_KEY ? `✅ Set (length: ${process.env.GEMINI_API_KEY.length})` : '❌ NOT SET');
+        console.log(`[IncidentsController.analyze] GEMINI_MODEL:`, process.env.GEMINI_MODEL || 'gemini-3-flash-preview (default)');
+        console.log(`[IncidentsController.analyze] Calling Gemini reasoning for scenario: ${scenario.scenarioId}`);
+        console.log(`[IncidentsController.analyze] Reasoning request candidates:`, candidates);
+        console.log(`[IncidentsController.analyze] Artifacts count:`, bundle.artifacts.length);
+        
         reasoningResult = await this.reasoningAdapter.reason(reasoningRequest);
         reasoningResponse = reasoningResult.response;
+        
+        console.log(`[IncidentsController.analyze] ✅ Gemini reasoning succeeded!`);
+        console.log(`[IncidentsController.analyze] Overall confidence:`, reasoningResponse.overallConfidence);
+        console.log(`[IncidentsController.analyze] Hypotheses count:`, reasoningResponse.hypotheses?.length || 0);
         
         // Build prompt trace hashes
         const promptHash = hashPromptParts(reasoningResult.prompt.system, reasoningResult.prompt.user);
@@ -899,8 +984,20 @@ export class IncidentsController {
           userPrompt: reasoningResult.prompt.user,
         };
       } catch (error: any) {
-        console.error('[IncidentsController.analyze] Reasoning adapter failed:', error?.message || error);
-        // Continue without reasoning response (non-blocking for Day 11)
+        console.error('[IncidentsController.analyze] ❌ Reasoning adapter failed:', error?.message || error);
+        console.error('[IncidentsController.analyze] Error stack:', error?.stack);
+        console.error('[IncidentsController.analyze] Error details:', {
+          name: error?.name,
+          code: error?.code,
+          message: error?.message,
+          cause: error?.cause,
+          issues: error?.issues,
+        });
+        // Don't silently fail - throw the error so it's visible
+        throw new HttpException(
+          `Gemini reasoning failed: ${error?.message || 'Unknown error'}. Check GEMINI_API_KEY and server logs.`,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       }
 
       // 11) Update requestJson to include candidates (for replay)
@@ -1222,8 +1319,17 @@ export class IncidentsController {
         let reasoningResult = null;
         let reasoningResponse = null;
         try {
+          console.log('[IncidentsController.analyzeExisting] ===== CALLING GEMINI REASONING =====');
+          console.log('[IncidentsController.analyzeExisting] GEMINI_API_KEY status:', process.env.GEMINI_API_KEY ? `✅ Set (length: ${process.env.GEMINI_API_KEY.length})` : '❌ NOT SET');
+          console.log('[IncidentsController.analyzeExisting] GEMINI_MODEL:', process.env.GEMINI_MODEL || 'gemini-3-flash-preview (default)');
+          console.log('[IncidentsController.analyzeExisting] Incident ID:', incident.id);
+          
           reasoningResult = await this.reasoningAdapter.reason(reasoningRequest);
           reasoningResponse = reasoningResult.response;
+          
+          console.log('[IncidentsController.analyzeExisting] ✅ Gemini reasoning succeeded!');
+          console.log('[IncidentsController.analyzeExisting] Overall confidence:', reasoningResponse.overallConfidence);
+          console.log('[IncidentsController.analyzeExisting] Hypotheses count:', reasoningResponse.hypotheses?.length || 0);
           
           const promptHash = hashPromptParts(reasoningResult.prompt.system, reasoningResult.prompt.user);
           const requestHash = hashRequest(reasoningRequest);
@@ -1237,7 +1343,19 @@ export class IncidentsController {
             userPrompt: reasoningResult.prompt.user,
           };
         } catch (error: any) {
-          console.error('[IncidentsController.analyzeExisting] Reasoning adapter failed:', error?.message || error);
+          console.error('[IncidentsController.analyzeExisting] ❌ Reasoning adapter failed:', error?.message || error);
+          console.error('[IncidentsController.analyzeExisting] Error stack:', error?.stack);
+          console.error('[IncidentsController.analyzeExisting] Error details:', {
+            name: error?.name,
+            code: error?.code,
+            message: error?.message,
+            cause: error?.cause,
+          });
+          // Don't silently fail - throw the error so it's visible
+          throw new HttpException(
+            `Gemini reasoning failed: ${error?.message || 'Unknown error'}. Check GEMINI_API_KEY and server logs.`,
+            HttpStatus.INTERNAL_SERVER_ERROR,
+          );
         }
 
         // Persist analysis with bundle link and completeness

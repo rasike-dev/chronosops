@@ -35,9 +35,11 @@ export class GeminiReasoningAdapter {
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
       this.logger.log(`Gemini API initialized with model: ${modelName}`);
+      this.logger.log(`GEMINI_API_KEY is set (length: ${apiKey.length})`);
     } else {
       this.genAI = null;
-      this.logger.warn("GEMINI_API_KEY not set - Gemini reasoning will fail. Set GEMINI_API_KEY in .env file.");
+      this.logger.error("GEMINI_API_KEY not set - Gemini reasoning will fail. Set GEMINI_API_KEY in .env file.");
+      this.logger.error("Please set GEMINI_API_KEY in your .env file to enable Gemini 3 reasoning.");
     }
   }
 
@@ -49,6 +51,7 @@ export class GeminiReasoningAdapter {
     let rawText = "";
     try {
       if (!this.genAI) {
+        this.logger.error("Gemini API not initialized - GEMINI_API_KEY missing");
         throw new ReasoningError(
           "GEMINI_API_KEY not configured",
           "MODEL_CALL_FAILED",
@@ -58,6 +61,9 @@ export class GeminiReasoningAdapter {
 
       // Use Gemini model from environment variable (default: gemini-3-flash-preview)
       const modelName = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
+      this.logger.log(`Calling Gemini model: ${modelName} for incident: ${req.incidentId}`);
+      this.logger.log(`Evidence artifacts: ${req.context.evidenceArtifacts.length}, Candidates: ${req.candidates.length}`);
+      
       const model = this.genAI.getGenerativeModel({ model: modelName });
 
       // Combine system and user prompts
@@ -83,7 +89,10 @@ export class GeminiReasoningAdapter {
       const response = await result.response;
       rawText = response.text();
 
+      this.logger.log(`Gemini response received, length: ${rawText.length} characters`);
+
       if (!rawText || !rawText.trim()) {
+        this.logger.error("Gemini returned empty response");
         throw new ReasoningError("Empty model output", "MODEL_OUTPUT_EMPTY");
       }
 
@@ -109,7 +118,10 @@ export class GeminiReasoningAdapter {
     let parsed: any;
     try {
       parsed = JSON.parse(rawText);
+      this.logger.log(`Gemini response parsed successfully`);
     } catch (e) {
+      this.logger.error(`Failed to parse Gemini JSON response:`, e);
+      this.logger.error(`Raw text (first 500 chars):`, rawText.slice(0, 500));
       throw new ReasoningError("Model output was not valid JSON", "MODEL_OUTPUT_INVALID", { rawText: rawText.slice(0, 2000) });
     }
 
@@ -118,10 +130,14 @@ export class GeminiReasoningAdapter {
 
     const validated = ReasoningResponseSchema.safeParse(parsed);
     if (!validated.success) {
+      this.logger.error(`Gemini response validation failed:`, validated.error.flatten());
+      this.logger.error(`Parsed response (first 1000 chars):`, JSON.stringify(parsed, null, 2).slice(0, 1000));
       throw new ReasoningError("Model output failed schema validation", "MODEL_OUTPUT_INVALID", {
         issues: validated.error.flatten(),
       });
     }
+    
+    this.logger.log(`Gemini reasoning validated successfully! Confidence: ${validated.data.overallConfidence}, Hypotheses: ${validated.data.hypotheses.length}`);
 
     // Validate that all hypothesis IDs are in the candidate set
     const candidateSet = new Set(req.candidates);

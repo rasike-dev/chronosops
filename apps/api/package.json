@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "nest start --watch",
     "start:dev": "nest start --watch",
+    "debug": "NODE_OPTIONS='--inspect' nest start --watch",
+    "debug:brk": "NODE_OPTIONS='--inspect-brk' nest start --watch",
     "build": "nest build && (ln -sf src/main.js dist/main.js 2>/dev/null || cp dist/src/main.js dist/main.js 2>/dev/null || true)",
     "start": "node dist/src/main.js",
     "seed:scenarios": "tsx prisma/seed-scenarios.ts"

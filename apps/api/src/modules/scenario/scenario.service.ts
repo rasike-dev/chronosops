@@ -18,7 +18,22 @@ export class ScenarioService {
       throw new NotFoundException(`Scenario not found: ${scenarioId}`);
     }
 
-    return ScenarioSchema.parse(scenario);
+    try {
+      return ScenarioSchema.parse(scenario);
+    } catch (error: any) {
+      // Safely serialize error to avoid Node inspect issues
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorIssues = error?.issues ? JSON.stringify(error.issues, null, 2) : '';
+      logger.error(`Failed to parse scenario ${scenarioId}: ${errorMessage}`, errorIssues || '');
+      // Log the problematic scenario data for debugging (safely)
+      try {
+        logger.error(`Scenario data:`, JSON.stringify(scenario, null, 2));
+      } catch (stringifyError) {
+        logger.error(`Scenario data (partial):`, { scenarioId: scenario?.scenarioId, title: scenario?.title });
+      }
+      const validationError = error?.issues?.[0]?.message || error?.message || 'Unknown validation error';
+      throw new Error(`Invalid scenario data for ${scenarioId}: ${validationError}`);
+    }
   }
 
   /**
