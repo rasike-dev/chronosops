@@ -1,5 +1,6 @@
 {
     "name": "chronosops",
+    "version": "2.0.1",
     "private": true,
     "packageManager": "pnpm@10.26.0",
     "scripts": {

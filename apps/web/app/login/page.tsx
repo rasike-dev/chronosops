@@ -87,7 +87,6 @@ export default function LoginPage() {
                 <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                   <div className="mb-3">
                     <h3 className="text-sm font-semibold text-gray-900 mb-1">Login Credentials</h3>
-                    <p className="text-xs text-gray-600">Quick access for development</p>
                   </div>
                   <div className="bg-white p-3 rounded border border-gray-200">
                     <div className="space-y-1.5 text-xs">
@@ -101,16 +100,8 @@ export default function LoginPage() {
                       </div>
                     </div>
                   </div>
-                </div>
-
-                <div className="pt-4 border-t">
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <div>For production access:</div>
-                    <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>Use Keycloak SSO</li>
-                      <li>Create a test user account</li>
-                      <li>Assign appropriate roles (Viewer, Analyst, Admin)</li>
-                    </ul>
+                  <div className="mt-3 text-center">
+                    <p className="text-xs text-gray-500">ChronosOps v2.0.1</p>
                   </div>
                 </div>
               </div>

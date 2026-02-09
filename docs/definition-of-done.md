@@ -1,11 +1,11 @@
-# ChronosOps — Definition of Done (MVP v1 Baseline)
+# ChronosOps — Definition of Done (v2.0.1 Baseline)
 
-**Tag:** mvp-v1
+**Tag:** v2.0.1
 
 ## Purpose
-Freeze the MVP scope for ChronosOps so future enterprise work can be validated against a stable baseline.
+Freeze the v2.0.1 scope for ChronosOps so future enterprise work can be validated against a stable baseline.
 
-## MVP Scope (Must Have)
+## v2.0.1 Scope (Must Have)
 ### Product
 - Web Console (Next.js) loads and renders incident workflow
 - API (NestJS) serves version + scenario data + analysis results
@@ -46,7 +46,7 @@ Freeze the MVP scope for ChronosOps so future enterprise work can be validated a
 - API connectivity indicator using `GET /v1/version`
 - Strict schema validation via shared contracts (`packages/contracts`)
 
-## Non-Goals (Explicitly Out of Scope for MVP)
+## Non-Goals (Explicitly Out of Scope for v2.0.1)
 - Persistence / database storage
 - Authentication / RBAC / tenant model
 - Audit logs / correlation IDs
@@ -63,8 +63,8 @@ Freeze the MVP scope for ChronosOps so future enterprise work can be validated a
 
 ## Known Limitations
 - Scenario telemetry is simulated
-- Analysis is deterministic, not LLM-driven in MVP baseline
-- No long-term storage, incidents are ephemeral
+- Analysis uses Gemini 3 Flash Preview for reasoning (production-grade AI)
+- Long-term storage and persistence are available
 
 ## Acceptance Checklist
 - [ ] `/v1/health` returns OK

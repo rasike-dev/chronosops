@@ -8,7 +8,7 @@ export const MetricPointSchema = z.object({
   value: z.number()
 });
 
-/** Scenario (MVP minimal) */
+/** Scenario (v2.0.1) */
 export const ScenarioSchema = z.object({
   scenarioId: z.string(),
   title: z.string(),
