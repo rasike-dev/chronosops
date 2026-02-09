@@ -10,6 +10,10 @@ datasource db {
 enum IncidentSourceType {
   SCENARIO
   GOOGLE_CLOUD
+  PAGERDUTY
+  DATADOG
+  NEW_RELIC
+  CUSTOM
 }
 
 model Incident {

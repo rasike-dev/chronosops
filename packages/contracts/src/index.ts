@@ -90,9 +90,9 @@ export const AnalyzeIncidentResponseSchema = z.object({
 });
 export type AnalyzeIncidentResponse = z.infer<typeof AnalyzeIncidentResponseSchema>;
 
-/** Incident Source Type */
-export const IncidentSourceTypeSchema = z.enum(["SCENARIO", "GOOGLE_CLOUD"]);
-export type IncidentSourceType = z.infer<typeof IncidentSourceTypeSchema>;
+/** Incident Source Type - Imported from ingestion schema */
+import { IncidentSourceTypeSchema, type IncidentSourceType } from "./ingestion/ingest-incident.schema";
+export { IncidentSourceTypeSchema, type IncidentSourceType };
 
 /** Incident schema (for responses) */
 export const IncidentSchema = z.object({
@@ -161,3 +161,6 @@ export * from "./investigation/investigation.schema";
 
 /** UI */
 export * from "./ui/explainability-graph.schema";
+
+/** Ingestion */
+export * from "./ingestion/ingest-incident.schema";

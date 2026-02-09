@@ -1,4 +1,4 @@
-import { ReasoningRequestSchema } from "@chronosops/contracts";
+import { ReasoningRequestSchema, type IncidentSourceType } from "@chronosops/contracts";
 import { PROMPT_VERSION } from "./reasoning.prompt";
 
 // Define HypothesisId type locally
@@ -17,7 +17,7 @@ type HypothesisId =
 export function buildReasoningRequest(input: {
   incidentId: string;
   evidenceBundleId: string;
-  sourceType: "SCENARIO" | "GOOGLE_CLOUD";
+  sourceType: IncidentSourceType;
   incidentSummary: string;
   timeline: { start: string; end: string };
   artifacts: Array<{ artifactId: string; kind: string; title: string; summary: string }>;

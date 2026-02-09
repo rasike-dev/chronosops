@@ -10,15 +10,19 @@ export class IncidentsPersistenceService {
   ) {}
 
   async createIncident(params: {
-    scenarioId: string;
+    scenarioId?: string; // Optional for non-scenario incidents
     title?: string | null;
-    sourceType?: 'SCENARIO' | 'GOOGLE_CLOUD';
+    sourceType?: 'SCENARIO' | 'GOOGLE_CLOUD' | 'PAGERDUTY' | 'DATADOG' | 'NEW_RELIC' | 'CUSTOM';
     sourceRef?: string | null;
     sourcePayload?: unknown | null;
   }) {
+    // For non-scenario incidents, use sourceRef as scenarioId (required by schema)
+    // This is a temporary workaround - ideally scenarioId should be optional
+    const scenarioId = params.scenarioId || params.sourceRef || 'unknown';
+    
     return this.prisma.incident.create({
       data: {
-        scenarioId: params.scenarioId,
+        scenarioId,
         title: params.title ?? null,
         status: 'analyzed',
         sourceType: params.sourceType ?? 'SCENARIO',

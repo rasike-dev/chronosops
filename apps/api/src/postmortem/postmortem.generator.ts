@@ -1,4 +1,4 @@
-import { PostmortemV2Schema, type PostmortemV2, type ReasoningResponse, type EvidenceCompleteness } from "@chronosops/contracts";
+import { PostmortemV2Schema, type PostmortemV2, type ReasoningResponse, type EvidenceCompleteness, type IncidentSourceType } from "@chronosops/contracts";
 
 export const POSTMORTEM_GENERATOR_VERSION = "v2";
 
@@ -6,7 +6,7 @@ export interface PostmortemGeneratorInput {
   incident: {
     id: string;
     title: string | null;
-    sourceType: "SCENARIO" | "GOOGLE_CLOUD";
+    sourceType: IncidentSourceType;
     sourceRef: string | null;
     createdAt: Date;
   };

@@ -9,11 +9,12 @@ import { AnalysisCompareService } from "./analysis/analysis-compare.service";
 import { InvestigationModule } from "../../investigation/investigation.module";
 import { AuditModule } from "../../audit/audit.module";
 import { AuditVerifyService } from "./analysis/audit-verify.service";
+import { IncidentNormalizer } from "./ingestion/incident-normalizer";
 
 @Module({
   imports: [ScenarioModule, GoogleIntegrationModule, CollectorsModule, ReasoningModule, InvestigationModule, AuditModule],
   controllers: [IncidentsController],
-  providers: [IncidentsPersistenceService, AnalysisCompareService, AuditVerifyService],
+  providers: [IncidentsPersistenceService, AnalysisCompareService, AuditVerifyService, IncidentNormalizer],
   exports: [IncidentsPersistenceService],
 })
 export class IncidentsModule {}

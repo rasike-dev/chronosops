@@ -34,7 +34,14 @@ export default function IncidentsPage() {
     return true
   }) || []
 
-  const sourceTypes = Array.from(new Set(q.data?.map((i) => i.sourceType).filter(Boolean) || []))
+  // All possible source types (for filter dropdown)
+  const allSourceTypes = ['SCENARIO', 'GOOGLE_CLOUD', 'PAGERDUTY', 'DATADOG', 'NEW_RELIC', 'CUSTOM']
+  
+  // Source types that exist in the data
+  const existingSourceTypes = Array.from(new Set(q.data?.map((i) => i.sourceType).filter(Boolean) || []))
+  
+  // Show all source types in filter, but mark which ones have data
+  const sourceTypes = allSourceTypes
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -65,11 +72,14 @@ export default function IncidentsPage() {
               className="px-3 py-1.5 border rounded-lg text-sm"
             >
               <option value="all">All Sources</option>
-              {sourceTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
+              {sourceTypes.map((type) => {
+                const count = q.data?.filter(i => i.sourceType === type).length || 0
+                return (
+                  <option key={type} value={type}>
+                    {type} {count > 0 ? `(${count})` : '(0)'}
+                  </option>
+                )
+              })}
             </select>
           </div>
           <div className="flex items-center gap-2">
@@ -134,7 +144,7 @@ export default function IncidentsPage() {
                 <div className="col-span-1 flex items-center">
                   {i.sourceType && (
                     <SourceBadge
-                      type={i.sourceType as 'SCENARIO' | 'GOOGLE_CLOUD'}
+                      type={i.sourceType as 'SCENARIO' | 'GOOGLE_CLOUD' | 'PAGERDUTY' | 'DATADOG' | 'NEW_RELIC' | 'CUSTOM'}
                       className="text-xs"
                     />
                   )}

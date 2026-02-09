@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, HttpException, HttpStatus, Param, Post, Req } from "@nestjs/common";
-import { AnalyzeIncidentRequestSchema, AnalyzeIncidentResponseSchema, ImportGoogleIncidentsRequestSchema } from "@chronosops/contracts";
+import { AnalyzeIncidentRequestSchema, AnalyzeIncidentResponseSchema, ImportGoogleIncidentsRequestSchema, IngestIncidentRequestSchema, IngestIncidentResponseSchema } from "@chronosops/contracts";
 import { ScenarioService } from "../scenario/scenario.service";
 import { IncidentsPersistenceService } from "./incidents.persistence.service";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -29,6 +29,7 @@ import { redactEvidenceBundle } from "../../policy/redaction";
 import { buildExplainabilityGraph } from "./analysis/explainability-graph.builder";
 import { AuditService } from "../../audit/audit.service";
 import { AuditVerifyService } from "./analysis/audit-verify.service";
+import { IncidentNormalizer, type NormalizedIncident } from "./ingestion/incident-normalizer";
 
 @Controller("v1/incidents")
 export class IncidentsController {
@@ -47,6 +48,7 @@ export class IncidentsController {
     private readonly investigationService: InvestigationService,
     private readonly audit: AuditService,
     private readonly auditVerify: AuditVerifyService,
+    private readonly normalizer: IncidentNormalizer,
   ) {}
 
   @Roles('CHRONOSOPS_VIEWER', 'CHRONOSOPS_ANALYST', 'CHRONOSOPS_ADMIN')

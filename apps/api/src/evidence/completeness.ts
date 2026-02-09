@@ -1,7 +1,7 @@
-import { EvidenceCompletenessSchema, EvidenceNeedSchema } from "@chronosops/contracts";
+import { EvidenceCompletenessSchema, EvidenceNeedSchema, type IncidentSourceType } from "@chronosops/contracts";
 
 export function computeEvidenceCompleteness(input: {
-  incidentSourceType: "SCENARIO" | "GOOGLE_CLOUD";
+  incidentSourceType: IncidentSourceType;
   primarySignal?: "latency" | "errors" | "UNKNOWN";
   bundle: any; // stored EvidenceBundle payload
 }) {

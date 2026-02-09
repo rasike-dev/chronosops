@@ -9,7 +9,7 @@ import { SourceBadge } from '@/components/SourceBadge'
 import { StatusBadge } from '@/components/StatusBadge'
 import type { ScenarioListItem, Scenario, AnalyzeIncidentResponse } from '@chronosops/contracts'
 
-type TabType = 'scenarios' | 'google'
+type TabType = 'scenarios' | 'google' | 'api'
 
 export default function AnalyzePage() {
   const router = useRouter()
@@ -96,7 +96,7 @@ export default function AnalyzePage() {
         <div>
           <h1 className="text-2xl font-semibold">Create Incident</h1>
           <p className="text-gray-600 mt-1">
-            Import from scenarios or real Google Cloud incidents. All sources are unified with full traceability.
+            Import from scenarios, Google Cloud incidents, or integrate via API (PagerDuty, Datadog, New Relic, Custom). All sources are unified with full traceability.
           </p>
         </div>
       </div>
@@ -123,6 +123,16 @@ export default function AnalyzePage() {
             }`}
           >
             ☁️ Google Cloud
+          </button>
+          <button
+            onClick={() => setActiveTab('api')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'api'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            🔌 API Integration
           </button>
         </nav>
       </div>
@@ -368,6 +378,129 @@ export default function AnalyzePage() {
         </div>
       )}
 
+      {/* API Integration Tab */}
+      {activeTab === 'api' && (
+        <div className="space-y-6">
+          <div className="rounded-xl border bg-white p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-2xl">🔌</span>
+              <h2 className="text-lg font-medium">Generic Ingestion API</h2>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-6">
+              ChronosOps supports ingestion from multiple incident management systems via a unified API endpoint. 
+              Use <code className="px-1.5 py-0.5 bg-gray-100 rounded text-xs">POST /v1/incidents/ingest</code> to integrate with:
+            </p>
+
+            <div className="grid md:grid-cols-2 gap-4 mb-6">
+              <div className="p-4 border rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">📟</span>
+                  <h3 className="font-medium">PagerDuty</h3>
+                </div>
+                <p className="text-xs text-gray-600 mb-2">
+                  Normalize PagerDuty webhooks and send to the ingestion endpoint
+                </p>
+                <div className="text-xs text-gray-500">
+                  Source Type: <code className="bg-gray-100 px-1 rounded">PAGERDUTY</code>
+                </div>
+              </div>
+
+              <div className="p-4 border rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">📊</span>
+                  <h3 className="font-medium">Datadog</h3>
+                </div>
+                <p className="text-xs text-gray-600 mb-2">
+                  Integrate Datadog incidents with severity mapping (SEV-1 to SEV-4)
+                </p>
+                <div className="text-xs text-gray-500">
+                  Source Type: <code className="bg-gray-100 px-1 rounded">DATADOG</code>
+                </div>
+              </div>
+
+              <div className="p-4 border rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">📈</span>
+                  <h3 className="font-medium">New Relic</h3>
+                </div>
+                <p className="text-xs text-gray-600 mb-2">
+                  Connect New Relic incidents with priority mapping (P1-P4)
+                </p>
+                <div className="text-xs text-gray-500">
+                  Source Type: <code className="bg-gray-100 px-1 rounded">NEW_RELIC</code>
+                </div>
+              </div>
+
+              <div className="p-4 border rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">⚙️</span>
+                  <h3 className="font-medium">Custom Sources</h3>
+                </div>
+                <p className="text-xs text-gray-600 mb-2">
+                  Integrate any incident management system with custom normalization
+                </p>
+                <div className="text-xs text-gray-500">
+                  Source Type: <code className="bg-gray-100 px-1 rounded">CUSTOM</code>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-6">
+              <h3 className="font-medium mb-3">API Endpoint</h3>
+              <div className="bg-gray-900 text-gray-100 p-4 rounded-lg font-mono text-sm mb-4">
+                <div className="text-green-400">POST</div>
+                <div className="mt-1">/v1/incidents/ingest</div>
+              </div>
+
+              <h3 className="font-medium mb-3">Example Request</h3>
+              <div className="bg-gray-50 p-4 rounded-lg border overflow-x-auto">
+                <pre className="text-xs text-gray-800">
+{`{
+  "sourceType": "PAGERDUTY",
+  "sourceRef": "PD-123456",
+  "title": "High error rate in payment-service",
+  "severity": "high",
+  "timeline": {
+    "start": "2024-01-15T10:00:00Z",
+    "end": "2024-01-15T11:00:00Z"
+  },
+  "metadata": {
+    "service": "payment-service",
+    "region": "us-east-1",
+    "environment": "production"
+  }
+}`}
+                </pre>
+              </div>
+
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="text-sm font-medium text-blue-900 mb-2">📚 Documentation</div>
+                <p className="text-xs text-blue-800 mb-2">
+                  For complete integration guide, API reference, and source-specific examples, see:
+                </p>
+                <a
+                  href="/docs/INGESTION_INTEGRATION_GUIDE.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:underline font-medium"
+                >
+                  Ingestion Integration Guide →
+                </a>
+              </div>
+
+              <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="text-sm font-medium text-yellow-900 mb-2">🔐 Authentication</div>
+                <p className="text-xs text-yellow-800">
+                  Requires <code className="bg-yellow-100 px-1 rounded">CHRONOSOPS_ANALYST</code> or <code className="bg-yellow-100 px-1 rounded">CHRONOSOPS_ADMIN</code> role.
+                  Include JWT token in <code className="bg-yellow-100 px-1 rounded">Authorization: Bearer &lt;token&gt;</code> header.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Info Box */}
       <div className="mt-6 rounded-xl border bg-blue-50 p-4">
         <div className="text-sm">
@@ -376,7 +509,8 @@ export default function AnalyzePage() {
             <li>Unified incident model with source traceability</li>
             <li>Idempotent imports (duplicates detected automatically)</li>
             <li>Replay-safe storage for all incident data</li>
-            <li>Both scenarios and real Google Cloud incidents supported</li>
+            <li>Multiple source types: Scenarios, Google Cloud, PagerDuty, Datadog, New Relic, Custom</li>
+            <li>Generic ingestion API for easy integration</li>
           </ul>
         </div>
       </div>

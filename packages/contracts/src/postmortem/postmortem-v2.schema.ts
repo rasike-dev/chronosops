@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { IncidentSourceTypeSchema } from "../ingestion/ingest-incident.schema";
 
 export const PostmortemReferenceSchema = z.object({
   kind: z.enum(["EVIDENCE_BUNDLE", "PROMPT_TRACE", "ANALYSIS"]),
@@ -28,7 +29,7 @@ export const PostmortemV2Schema = z.object({
   generatorVersion: z.string().min(1).max(64),
 
   source: z.object({
-    sourceType: z.enum(["SCENARIO", "GOOGLE_CLOUD"]),
+    sourceType: IncidentSourceTypeSchema,
     sourceRef: z.string().optional().nullable(),
     sourceUrl: z.string().optional().nullable(),
   }),
