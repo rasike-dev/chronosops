@@ -128,11 +128,11 @@ export default function IncidentsPage() {
         {q.isSuccess && filteredIncidents.length > 0 && (
           <div className="rounded-xl border bg-white overflow-hidden">
             <div className="grid grid-cols-12 px-4 py-3 text-xs font-medium text-gray-500 border-b bg-gray-50">
-              <div className="col-span-1">Source</div>
+              <div className="col-span-2">Source</div>
               <div className="col-span-4">Incident</div>
               <div className="col-span-2">Scenario</div>
               <div className="col-span-2">Status</div>
-              <div className="col-span-3">Created</div>
+              <div className="col-span-2">Created</div>
             </div>
 
             {filteredIncidents.map((i) => (
@@ -141,7 +141,7 @@ export default function IncidentsPage() {
                 href={`/incidents/${i.id}`}
                 className="grid grid-cols-12 px-4 py-4 text-sm hover:bg-gray-50 border-b last:border-b-0 transition-colors"
               >
-                <div className="col-span-1 flex items-center">
+                <div className="col-span-2 flex items-center min-w-0">
                   {i.sourceType && (
                     <SourceBadge
                       type={i.sourceType as 'SCENARIO' | 'GOOGLE_CLOUD' | 'PAGERDUTY' | 'DATADOG' | 'NEW_RELIC' | 'CUSTOM'}
@@ -149,21 +149,21 @@ export default function IncidentsPage() {
                     />
                   )}
                 </div>
-                <div className="col-span-4">
-                  <div className="font-medium text-gray-900">
+                <div className="col-span-4 min-w-0">
+                  <div className="font-medium text-gray-900 truncate">
                     {i.title?.trim() ? i.title : `Incident ${i.id.slice(0, 10)}`}
                   </div>
                   {i.sourceRef && (
-                    <div className="text-xs text-gray-500 mt-0.5">Ref: {i.sourceRef.slice(0, 20)}...</div>
+                    <div className="text-xs text-gray-500 mt-0.5 truncate">Ref: {i.sourceRef.slice(0, 20)}...</div>
                   )}
                 </div>
-                <div className="col-span-2 text-gray-700">
+                <div className="col-span-2 text-gray-700 truncate">
                   {i.scenarioId || '-'}
                 </div>
                 <div className="col-span-2">
                   <StatusBadge status={i.status as any} />
                 </div>
-                <div className="col-span-3 text-gray-600">
+                <div className="col-span-2 text-gray-600 text-xs">
                   {new Date(i.createdAt).toLocaleString()}
                 </div>
               </Link>

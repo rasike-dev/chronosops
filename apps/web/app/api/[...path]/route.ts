@@ -20,8 +20,18 @@ async function handleRequest(
     "Content-Type": req.headers.get("content-type") || "application/json",
   }
 
+  // For Keycloak SSO, use the access token
   if (accessToken) {
     headers["Authorization"] = `Bearer ${accessToken}`
+  } 
+  // For credentials-based auth (dev-admin), we don't have a real JWT
+  // The API should have AUTH_REQUIRED=false for this to work, or implement
+  // a dev token generator
+  else if (token && (token as any).sub === "dev-admin") {
+    // For dev credentials, we can create a simple mock token
+    // In production, you'd want to generate a proper JWT
+    // For now, API must have AUTH_REQUIRED=false to allow this
+    headers["X-Dev-User"] = "dev-admin"
   }
 
   const body = req.method !== "GET" && req.method !== "HEAD" 

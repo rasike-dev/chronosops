@@ -65,6 +65,7 @@ export default function LoginPage() {
                   </p>
                 </div>
 
+                {/* SSO Login Button */}
                 <button
                   onClick={handleSignIn}
                   disabled={isLoading}
@@ -76,14 +77,30 @@ export default function LoginPage() {
                   Sign in with Keycloak
                 </button>
 
+                {/* Login Credentials Info */}
                 <div className="pt-4 border-t">
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <div>For demo access, you can:</div>
-                    <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>Use Keycloak admin console</li>
-                      <li>Create a test user account</li>
-                      <li>Assign appropriate roles (Viewer, Analyst, Admin)</li>
-                    </ul>
+                  <div className="text-xs text-gray-500 space-y-2">
+                    <div className="font-medium text-gray-700">Login Credentials:</div>
+                    <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-600">Username:</span>
+                          <span className="font-mono text-gray-900">dev-admin</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-600">Password:</span>
+                          <span className="font-mono text-gray-900">devpass</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 space-y-1">
+                      <div>For production access:</div>
+                      <ul className="list-disc list-inside space-y-1 ml-2">
+                        <li>Use Keycloak SSO</li>
+                        <li>Create a test user account</li>
+                        <li>Assign appropriate roles (Viewer, Analyst, Admin)</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>
