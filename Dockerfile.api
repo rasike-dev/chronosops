@@ -1,0 +1,67 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy root package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy packages
+COPY packages ./packages
+
+# Copy API package.json
+COPY apps/api/package.json ./apps/api/
+
+# Install pnpm
+RUN npm install -g pnpm@10.26.0
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build contracts package first (required by API)
+WORKDIR /app/packages/contracts
+RUN pnpm build
+
+# Copy API source
+WORKDIR /app
+COPY apps/api ./apps/api
+
+# Generate Prisma client
+WORKDIR /app/apps/api
+RUN pnpm prisma generate
+
+# Build API
+RUN pnpm build
+
+# Production image
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@10.26.0
+
+# Copy root package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy packages
+COPY packages ./packages
+
+# Copy API package.json
+COPY apps/api/package.json ./apps/api/
+
+# Install production dependencies (including @prisma/client)
+RUN pnpm install --frozen-lockfile --prod
+
+# Copy built files from builder
+COPY --from=builder /app/packages/contracts/dist ./packages/contracts/dist
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+COPY --from=builder /app/apps/api/generated ./apps/api/generated
+
+WORKDIR /app/apps/api
+
+# Expose port
+EXPOSE 4000
+
+# Start application
+CMD ["node", "dist/src/main.js"]

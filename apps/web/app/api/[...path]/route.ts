@@ -57,40 +57,40 @@ async function handleRequest(
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const resolvedParams = await Promise.resolve(params)
+  const resolvedParams = await params
   return handleRequest(req, resolvedParams)
 }
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const resolvedParams = await Promise.resolve(params)
+  const resolvedParams = await params
   return handleRequest(req, resolvedParams)
 }
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const resolvedParams = await Promise.resolve(params)
+  const resolvedParams = await params
   return handleRequest(req, resolvedParams)
 }
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const resolvedParams = await Promise.resolve(params)
+  const resolvedParams = await params
   return handleRequest(req, resolvedParams)
 }
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> | { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const resolvedParams = await Promise.resolve(params)
+  const resolvedParams = await params
   return handleRequest(req, resolvedParams)
 }

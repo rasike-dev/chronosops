@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.0.1",
   "scripts": {
-    "dev": "next dev -p 3000"
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000"
   },
   "dependencies": {
     "@chronosops/contracts": "workspace:*",

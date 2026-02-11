@@ -68,9 +68,9 @@ const handler = NextAuth({
       }
       // For credentials provider, persist user info
       if (user) {
-        token.sub = user.sub || user.id
-        token.email = user.email
-        token.name = user.name
+        token.sub = (user as any).sub || user.id
+        token.email = user.email || undefined
+        token.name = user.name || undefined
         token.roles = (user as any).roles || []
       }
       return token

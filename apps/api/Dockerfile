@@ -1,49 +1,48 @@
-FROM node:20-alpine AS base
-
-# Install pnpm
-RUN npm install -g pnpm@10.26.0
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 # Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/contracts/package.json ./packages/contracts/
-COPY apps/api/package.json ./apps/api/
+COPY package.json pnpm-lock.yaml ./
+COPY ../../package.json ../../
+COPY ../../packages ./packages
+COPY . .
+
+# Install pnpm
+RUN npm install -g pnpm
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy source
-COPY . .
+# Generate Prisma client
+RUN pnpm prisma generate
 
-# Build contracts
-RUN pnpm -C packages/contracts build
+# Build
+RUN pnpm build
 
-# Build API
-RUN pnpm -C apps/api build
-
-# Production stage
-FROM node:20-alpine AS production
-
-RUN npm install -g pnpm@10.26.0
+# Production image
+FROM node:20-alpine
 
 WORKDIR /app
 
 # Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/contracts/package.json ./packages/contracts/
-COPY apps/api/package.json ./apps/api/
+COPY package.json pnpm-lock.yaml ./
+COPY ../../package.json ../../
+COPY ../../packages ./packages
 
-# Install production dependencies only
+# Install pnpm
+RUN npm install -g pnpm
+
+# Install production dependencies
 RUN pnpm install --frozen-lockfile --prod
 
-# Copy built artifacts
-COPY --from=base /app/packages/contracts/dist ./packages/contracts/dist
-COPY --from=base /app/apps/api/dist ./apps/api/dist
-COPY --from=base /app/apps/api/prisma ./apps/api/prisma
+# Copy built files
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
-WORKDIR /app/apps/api
-
+# Expose port
 EXPOSE 4000
 
-CMD ["node", "dist/main.js"]
+# Start application
+CMD ["node", "dist/src/main.js"]

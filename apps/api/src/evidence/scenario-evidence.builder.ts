@@ -1,5 +1,9 @@
 import type { CollectorResult } from "../collectors/collector.types";
 import type { Scenario } from "@chronosops/contracts";
+import { MetricPointSchema } from "@chronosops/contracts";
+import { z } from "zod";
+
+type MetricPoint = z.infer<typeof MetricPointSchema>;
 
 /**
  * Converts scenario data into realistic evidence artifacts
@@ -46,40 +50,40 @@ function buildMetricsSummaryFromScenario(
   const windowEnd = new Date(window.end);
 
   // Filter metrics within window
-  const windowMetrics = metrics.filter((m) => {
+  const windowMetrics = metrics.filter((m: MetricPoint) => {
     const ts = new Date(m.timestamp);
     return ts >= windowStart && ts <= windowEnd;
   });
 
   // Separate by metric type
   const latencyPoints = windowMetrics
-    .filter((m) => m.metric === "p95_latency_ms")
-    .map((m) => ({ ts: m.timestamp, value: m.value }));
+    .filter((m: MetricPoint) => m.metric === "p95_latency_ms")
+    .map((m: MetricPoint) => ({ ts: m.timestamp, value: m.value }));
   const errorPoints = windowMetrics
-    .filter((m) => m.metric === "error_rate")
-    .map((m) => ({ ts: m.timestamp, value: m.value }));
+    .filter((m: MetricPoint) => m.metric === "error_rate")
+    .map((m: MetricPoint) => ({ ts: m.timestamp, value: m.value }));
   const rpsPoints = windowMetrics
-    .filter((m) => m.metric === "rps")
-    .map((m) => ({ ts: m.timestamp, value: m.value }));
+    .filter((m: MetricPoint) => m.metric === "rps")
+    .map((m: MetricPoint) => ({ ts: m.timestamp, value: m.value }));
 
   // Calculate before/after averages
   const beforeDeploy = windowMetrics.filter(
-    (m) => new Date(m.timestamp) < deployTime
+    (m: MetricPoint) => new Date(m.timestamp) < deployTime
   );
   const afterDeploy = windowMetrics.filter(
-    (m) => new Date(m.timestamp) >= deployTime
+    (m: MetricPoint) => new Date(m.timestamp) >= deployTime
   );
 
   const beforeLatency = beforeDeploy
-    .filter((m) => m.metric === "p95_latency_ms")
-    .reduce((sum, m) => sum + m.value, 0) / Math.max(1, beforeDeploy.filter((m) => m.metric === "p95_latency_ms").length);
+    .filter((m: MetricPoint) => m.metric === "p95_latency_ms")
+    .reduce((sum: number, m: MetricPoint) => sum + m.value, 0) / Math.max(1, beforeDeploy.filter((m: MetricPoint) => m.metric === "p95_latency_ms").length);
   const afterLatency = afterDeploy
     .filter((m) => m.metric === "p95_latency_ms")
     .reduce((sum, m) => sum + m.value, 0) / Math.max(1, afterDeploy.filter((m) => m.metric === "p95_latency_ms").length);
 
   const beforeError = beforeDeploy
-    .filter((m) => m.metric === "error_rate")
-    .reduce((sum, m) => sum + m.value, 0) / Math.max(1, beforeDeploy.filter((m) => m.metric === "error_rate").length);
+    .filter((m: MetricPoint) => m.metric === "error_rate")
+    .reduce((sum: number, m: MetricPoint) => sum + m.value, 0) / Math.max(1, beforeDeploy.filter((m: MetricPoint) => m.metric === "error_rate").length);
   const afterError = afterDeploy
     .filter((m) => m.metric === "error_rate")
     .reduce((sum, m) => sum + m.value, 0) / Math.max(1, afterDeploy.filter((m) => m.metric === "error_rate").length);

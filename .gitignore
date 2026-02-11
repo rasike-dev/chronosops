@@ -22,9 +22,10 @@ out/
 .env.backup
 *.backup
 
-# Logs
-logs/
+# Logs (but not source code in collectors/logs/)
+/logs/
 *.log
+!**/collectors/logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

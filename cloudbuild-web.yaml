@@ -1,0 +1,11 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'apps/web/Dockerfile'
+      - '-t'
+      - 'gcr.io/chronosops/chronosops-web:latest'
+      - '.'
+images:
+  - 'gcr.io/chronosops/chronosops-web:latest'
